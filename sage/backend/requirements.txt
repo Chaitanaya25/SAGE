@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+python-jose[cryptography]
+python-multipart
+supabase
+openai
+langchain
+langgraph
+langchain-openai
+PyPDF2
+httpx
+python-dotenv
+websockets
+pydantic
