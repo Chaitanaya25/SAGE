@@ -204,6 +204,7 @@ export default function Interview() {
   }[interviewState];
 
   return (
+    <React.Fragment>
     <div className="min-h-screen bg-[#FAFAFA]">
       <style>{`
         .waveform-bar { animation: waveform 1s ease-in-out infinite; }
@@ -364,5 +365,6 @@ export default function Interview() {
         </div>
       </FadeContent>
     </div>
+    </React.Fragment>
   );
 }
