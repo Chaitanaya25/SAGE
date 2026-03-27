@@ -111,16 +111,35 @@ async def save_questions(interview_id: str, questions: List[Any]) -> List[Dict[s
     def _op() -> List[Dict[str, Any]]:
         rows_to_insert: List[Dict[str, Any]] = []
         for index, question in enumerate(questions):
-            payload: Any = question
-            if isinstance(question, str):
-                payload = {"text": question}
-            rows_to_insert.append(
-                {
-                    "interview_id": interview_id,
-                    "order": index,
-                    "question": payload,
-                }
-            )
+            if isinstance(question, dict):
+                question_text = (
+                    question.get("question_text")
+                    or question.get("question")
+                    or question.get("text")
+                    or ""
+                )
+                question_order = question.get("question_order")
+                if question_order is None:
+                    question_order = index
+                rows_to_insert.append(
+                    {
+                        "interview_id": interview_id,
+                        "question_text": str(question_text),
+                        "question_order": int(question_order),
+                        "category": question.get("category"),
+                        "context": question.get("context"),
+                    }
+                )
+            else:
+                rows_to_insert.append(
+                    {
+                        "interview_id": interview_id,
+                        "question_text": str(question),
+                        "question_order": index,
+                        "category": None,
+                        "context": None,
+                    }
+                )
 
         resp = _get_supabase().table("questions").insert(rows_to_insert).execute()
         return resp.data or []
@@ -135,7 +154,7 @@ async def get_questions(interview_id: str) -> List[Dict[str, Any]]:
             .table("questions")
             .select("*")
             .eq("interview_id", interview_id)
-            .order("order")
+            .order("question_order")
             .execute()
         )
         return resp.data or []
@@ -206,4 +225,3 @@ async def get_all_interviews() -> List[Dict[str, Any]]:
         return resp.data or []
 
     return await asyncio.to_thread(_op)
-
