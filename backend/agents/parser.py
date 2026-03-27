@@ -1,2 +1,69 @@
-async def parse_resume(pdf_bytes: bytes, candidate_id: str, job_role: str) -> dict:
-    pass
+from __future__ import annotations
+
+import json
+import logging
+import os
+from io import BytesIO
+from typing import Any, Dict
+
+from openai import AsyncOpenAI
+from PyPDF2 import PdfReader
+
+from database import update_candidate
+
+
+logger = logging.getLogger(__name__)
+client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+
+async def parse_resume(pdf_bytes: bytes, candidate_id: str, job_role: str) -> Dict[str, Any]:
+    reader = PdfReader(BytesIO(pdf_bytes))
+    text = "".join([(page.extract_text() or "") for page in reader.pages])
+
+    if len(text.strip()) < 50:
+        raise ValueError("Could not extract meaningful text from PDF")
+
+    text = text[:6000]
+
+    response = await client.chat.completions.create(
+        model="gpt-4o",
+        temperature=0.1,
+        response_format={"type": "json_object"},
+        messages=[
+            {
+                "role": "system",
+                "content": f"""You are an expert resume parser for SAGE recruitment platform.
+Extract structured data from this resume. Candidate is applying for: {job_role}
+
+Return ONLY valid JSON:
+{{
+  "name": "string",
+  "email": "string or null",
+  "phone": "string or null",
+  "skills": ["string"],
+  "experience": [{{"company": "string", "role": "string", "duration": "string", "highlights": ["string"]}}],
+  "education": [{{"institution": "string", "degree": "string", "year": "string or null"}}],
+  "gaps": ["string"],
+  "role_fit_score": 1-10,
+  "summary": "2-3 sentence summary"
+}}""",
+            },
+            {"role": "user", "content": text},
+        ],
+    )
+
+    content = response.choices[0].message.content or "{}"
+    parsed: Dict[str, Any] = json.loads(content)
+
+    await update_candidate(
+        candidate_id,
+        {
+            "resume_parsed": parsed,
+            "name": parsed.get("name", "") or "",
+            "email": parsed.get("email", "") or "",
+            "phone": parsed.get("phone", "") or "",
+        },
+    )
+
+    logger.info("Resume parsed for candidate %s", candidate_id)
+    return parsed
