@@ -16,17 +16,6 @@ An autonomous AI recruitment interview platform that screens job candidates end-
 - Voice: Deepgram (STT) + ElevenLabs (TTS) + WebSocket
 - Database: Supabase (PostgreSQL)
 
-## Project Structure
-sage/
-  backend/        - FastAPI + LangGraph agents
-    agents/       - 5 AI agent modules
-    main.py       - API endpoints + WebSocket
-    pipeline.py   - LangGraph StateGraph
-  frontend/       - React + Vite
-    src/
-      pages/      - Candidate portal + HR dashboard
-      components/ - UI components
-
 ## Quick Start
 Backend:
   cd sage/backend
@@ -37,6 +26,3 @@ Frontend:
   cd sage/frontend
   npm install
   npm run dev
-
-## Built by
-Chaitanya for VibeCon Hackathon 2025
