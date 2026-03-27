@@ -1,4 +1,3 @@
-.claude/
 node_modules/
 __pycache__/
 *.pyc
@@ -7,3 +6,4 @@ dist/
 build/
 .vscode/
 .idea/
+.claude/
