@@ -204,11 +204,17 @@ export default function InterviewList() {
             </Button>
           )
         }
+        // Mock rows have candidate_id "abc" — send to upload step
+        const isMock = candidate_id === "abc"
         return (
           <Button
             size="sm"
             className={isDark ? "bg-[#7C3AED] hover:bg-[#7C3AED]/90 text-white" : "bg-black text-white hover:bg-black/90"}
-            onClick={() => navigate("/interview", { state: { candidateId: candidate_id, interviewId: id, jobRole: job_role } })}
+            onClick={() =>
+              isMock
+                ? navigate("/interview")
+                : navigate("/interview", { state: { candidateId: candidate_id, interviewId: id, jobRole: job_role } })
+            }
           >
             <Mic size={14} className="mr-1.5" />
             Start Interview

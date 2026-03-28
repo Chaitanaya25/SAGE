@@ -70,6 +70,12 @@ export default function Interview() {
   const mediaStreamRef   = useRef<MediaStream | null>(null)
   const chunksRef        = useRef<BlobPart[]>([])
 
+  // Refs so WS closure always sees latest values without re-subscribing
+  const phaseRef           = useRef(phase)
+  phaseRef.current         = phase
+  // Populated after startRecording is defined below
+  const startRecordingRef  = useRef<() => Promise<void>>(async () => {})
+
   const timerLabel = useMemo(() => {
     const m = Math.floor(elapsed / 60)
     const s = elapsed % 60
@@ -169,6 +175,12 @@ export default function Interview() {
       audioEl.onended = () => {
         URL.revokeObjectURL(url)
         setUiState((s) => (s === "ai_speaking" ? "idle" : s))
+        console.log("[SAGE] AI finished speaking, auto-starting mic...")
+        setTimeout(() => {
+          if (phaseRef.current === "live") {
+            void startRecordingRef.current()
+          }
+        }, 500)
       }
     }
 
@@ -258,17 +270,50 @@ export default function Interview() {
       console.warn("[SAGE] WS not open, cannot record")
       return
     }
+    // Guard: don't start if already recording or in a non-idle state
+    if (mediaRecorderRef.current?.state === "recording") return
+
     setUiState("recording")
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
     mediaStreamRef.current = stream
+
     const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
       ? "audio/webm;codecs=opus"
       : "audio/webm"
     const recorder = new MediaRecorder(stream, { mimeType })
     mediaRecorderRef.current = recorder
     chunksRef.current = []
+
+    // ── Silence detection via Web Audio AnalyserNode ──
+    const audioCtx = new AudioContext()
+    const analyser = audioCtx.createAnalyser()
+    analyser.fftSize = 256
+    audioCtx.createMediaStreamSource(stream).connect(analyser)
+    const volumeData = new Uint8Array(analyser.frequencyBinCount)
+    let silenceTimer: ReturnType<typeof setTimeout> | null = null
+    const SILENCE_MS = 3000
+
+    const silenceCheck = setInterval(() => {
+      analyser.getByteFrequencyData(volumeData)
+      const avg = volumeData.reduce((a, b) => a + b, 0) / volumeData.length
+      if (avg / 255 < 0.01) {
+        if (!silenceTimer) {
+          silenceTimer = setTimeout(() => {
+            console.log("[SAGE] Silence detected, stopping recording")
+            clearInterval(silenceCheck)
+            stopRecording()
+          }, SILENCE_MS)
+        }
+      } else {
+        if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null }
+      }
+    }, 100)
+
     recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
     recorder.onstop = () => {
+      clearInterval(silenceCheck)
+      if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null }
+      void audioCtx.close()
       const blob = new Blob(chunksRef.current, { type: mimeType })
       console.log("[SAGE] Sending audio blob, size:", blob.size)
       ws.send(blob)
@@ -278,6 +323,8 @@ export default function Interview() {
     }
     recorder.start()
   }
+  // Keep ref in sync so WS closure can call latest version
+  startRecordingRef.current = startRecording
 
   function stopRecording() {
     const r = mediaRecorderRef.current
