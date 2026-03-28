@@ -1,36 +1,21 @@
-import { useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import {
-  BarChart3,
   Brain,
-  Calendar,
-  FileSearch,
   Mic,
   Shield,
-  Moon,
-  Sun,
 } from "lucide-react"
 
 import CountUp from "@/components/CountUp"
 import AnimatedBackground from "@/components/AnimatedBackground"
-import ScheduledInterviews from "@/components/ScheduledInterviews"
+import CandidateHeader from "@/components/CandidateHeader"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
-import { Calendar20 } from "@/components/ui/calendar-with-time-pressets"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { PricingSection } from "@/components/ui/pricing"
 import { useTheme } from "@/lib/theme-context"
 
 export default function Home() {
-  const { theme, toggleTheme } = useTheme()
+  const { theme } = useTheme()
   const isDark = theme === "dark"
-  const [activeDropdown, setActiveDropdown] = useState<string | null>(null)
-  const [showSchedule, setShowSchedule] = useState(false)
-  const [showCalendar, setShowCalendar] = useState(false)
-  const [booking, setBooking] = useState<{ date: Date | undefined; time: string | null }>({
-    date: undefined,
-    time: null,
-  })
   const glassCard = [
     "relative overflow-hidden p-6 transition-colors duration-300 backdrop-blur-sm",
     "transition-transform duration-300 hover:-translate-y-[2px]",
@@ -39,24 +24,6 @@ export default function Home() {
   const outlineCtaClass = isDark
     ? "border-zinc-700/60 bg-transparent hover:bg-zinc-900"
     : "border-black text-black hover:bg-black hover:text-white"
-
-  const headerShell = isDark
-    ? "bg-zinc-950/80 border-zinc-800 text-zinc-400"
-    : "bg-white/80 border-gray-200 text-gray-600"
-  const dropdownShell = isDark
-    ? "bg-zinc-900/95 border-zinc-800 text-zinc-50"
-    : "bg-white/95 border-gray-200 text-gray-900"
-  const navButtonBase = isDark
-    ? "text-sm text-white hover:text-white transition-colors px-3 py-2"
-    : "text-sm text-gray-600 hover:text-gray-900 transition-colors px-3 py-2"
-
-  const bookingText = useMemo(() => {
-    const date = booking.date
-    const time = booking.time
-    if (!date || !time) return "Select a date and time to book your assessment."
-    const d = date.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })
-    return `Your assessment is booked for ${d} at ${time}`
-  }, [booking.date, booking.time])
 
   return (
     <div
@@ -68,218 +35,7 @@ export default function Home() {
       <AnimatedBackground variant="particles" />
 
       <div className="relative z-10">
-        <style>{`
-          @keyframes sageDropdownIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
-          .sage-dropdown { animation: sageDropdownIn 200ms ease-out; }
-        `}</style>
-
-        <header className={["sticky top-0 z-50 backdrop-blur-lg border-b", headerShell].join(" ")}>
-          <div className="max-w-6xl mx-auto flex items-center justify-between h-16 px-6">
-            <Link to="/home" className={["font-bold text-xl", isDark ? "text-white" : "text-gray-900"].join(" ")}>
-              SAGE
-            </Link>
-
-            <nav className="hidden md:flex items-center gap-2">
-              <div
-                className="relative"
-                onMouseEnter={() => setActiveDropdown("product")}
-                onMouseLeave={() => {
-                  setActiveDropdown(null)
-                  setShowSchedule(false)
-                  setShowCalendar(false)
-                }}
-              >
-                <button type="button" className={navButtonBase}>
-                  Product
-                </button>
-                {activeDropdown === "product" ? (
-                  <div
-                    className={[
-                      "sage-dropdown absolute top-full left-0 mt-2 backdrop-blur-xl border rounded-xl p-4 shadow-2xl relative before:content-[''] before:absolute before:-top-2 before:left-0 before:right-0 before:h-2",
-                      showSchedule ? "min-w-[640px]" : "min-w-[480px]",
-                      dropdownShell,
-                    ].join(" ")}
-                  >
-                    <div className="grid grid-cols-2 gap-2">
-                      <Link
-                        to="/analyze"
-                        onMouseEnter={() => setActiveDropdown("product")}
-                        className={[
-                          "flex items-start gap-3 p-3 rounded-lg",
-                          isDark ? "hover:bg-zinc-800/50" : "hover:bg-gray-100",
-                        ].join(" ")}
-                      >
-                        <div
-                          className={[
-                            "h-10 w-10 rounded-lg p-2 flex items-center justify-center",
-                            isDark ? "bg-zinc-800" : "bg-gray-100",
-                          ].join(" ")}
-                        >
-                          <FileSearch className={isDark ? "text-white" : "text-gray-900"} size={18} />
-                        </div>
-                        <div>
-                          <div className={["text-sm font-medium", isDark ? "text-white" : "text-gray-900"].join(" ")}>
-                            Resume Analysis
-                          </div>
-                          <div className={["text-xs", isDark ? "text-zinc-400" : "text-gray-600"].join(" ")}>
-                            ATS-style resume scoring with skill matching and hiring probability
-                          </div>
-                        </div>
-                      </Link>
-
-                      <Link
-                        to="/upload"
-                        onMouseEnter={() => setActiveDropdown("product")}
-                        className={[
-                          "flex items-start gap-3 p-3 rounded-lg",
-                          isDark ? "hover:bg-zinc-800/50" : "hover:bg-gray-100",
-                        ].join(" ")}
-                      >
-                        <div
-                          className={[
-                            "h-10 w-10 rounded-lg p-2 flex items-center justify-center",
-                            isDark ? "bg-zinc-800" : "bg-gray-100",
-                          ].join(" ")}
-                        >
-                          <Mic className={isDark ? "text-white" : "text-gray-900"} size={18} />
-                        </div>
-                        <div>
-                          <div className={["text-sm font-medium", isDark ? "text-white" : "text-gray-900"].join(" ")}>
-                            Voice Interview
-                          </div>
-                          <div className={["text-xs", isDark ? "text-zinc-400" : "text-gray-600"].join(" ")}>
-                            Real-time AI voice interview with dynamic questioning
-                          </div>
-                        </div>
-                      </Link>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowSchedule((v) => !v)
-                          setShowCalendar(false)
-                        }}
-                        className={[
-                          "flex items-start gap-3 p-3 rounded-lg text-left",
-                          isDark ? "hover:bg-zinc-800/50" : "hover:bg-gray-100",
-                        ].join(" ")}
-                      >
-                        <div
-                          className={[
-                            "h-10 w-10 rounded-lg p-2 flex items-center justify-center",
-                            isDark ? "bg-zinc-800" : "bg-gray-100",
-                          ].join(" ")}
-                        >
-                          <Calendar className={isDark ? "text-white" : "text-gray-900"} size={18} />
-                        </div>
-                        <div>
-                          <div className={["text-sm font-medium", isDark ? "text-white" : "text-gray-900"].join(" ")}>
-                            Schedule Assessment
-                          </div>
-                          <div className={["text-xs", isDark ? "text-zinc-400" : "text-gray-600"].join(" ")}>
-                            Book your interview slot with our AI interviewer
-                          </div>
-                        </div>
-                      </button>
-
-                      <Link
-                        to="/done"
-                        onMouseEnter={() => setActiveDropdown("product")}
-                        className={[
-                          "flex items-start gap-3 p-3 rounded-lg",
-                          isDark ? "hover:bg-zinc-800/50" : "hover:bg-gray-100",
-                        ].join(" ")}
-                      >
-                        <div
-                          className={[
-                            "h-10 w-10 rounded-lg p-2 flex items-center justify-center",
-                            isDark ? "bg-zinc-800" : "bg-gray-100",
-                          ].join(" ")}
-                        >
-                          <BarChart3 className={isDark ? "text-white" : "text-gray-900"} size={18} />
-                        </div>
-                        <div>
-                          <div className={["text-sm font-medium", isDark ? "text-white" : "text-gray-900"].join(" ")}>
-                            Score Dashboard
-                          </div>
-                          <div className={["text-xs", isDark ? "text-zinc-400" : "text-gray-600"].join(" ")}>
-                            View your evaluation scores and improvement areas
-                          </div>
-                        </div>
-                      </Link>
-                    </div>
-                    {showSchedule ? (
-                      <div
-                        className={[
-                          "mt-4 pt-4 border-t",
-                          isDark ? "border-zinc-800" : "border-gray-200",
-                        ].join(" ")}
-                      >
-                        <ScheduledInterviews />
-                        <Button
-                          className="w-full mt-3"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setShowCalendar((v) => !v)}
-                        >
-                          Book New Assessment Slot
-                        </Button>
-                        {showCalendar ? (
-                          <div className={["mt-3 rounded-xl border", isDark ? "border-zinc-800" : "border-gray-200"].join(" ")}>
-                            <Calendar20 value={booking} onChange={setBooking} />
-                            <div className={["px-4 pb-4 text-xs", isDark ? "text-zinc-400" : "text-gray-600"].join(" ")}>
-                              {bookingText}
-                            </div>
-                          </div>
-                        ) : null}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null}
-              </div>
-
-              <a className={navButtonBase} href="#pricing">
-                Pricing
-              </a>
-              <a className={navButtonBase} href="#faq">
-                FAQ
-              </a>
-            </nav>
-
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                size="icon"
-                variant="outline"
-                onClick={toggleTheme}
-                className={isDark ? "border-zinc-800 bg-transparent hover:bg-zinc-900" : "border-gray-200 bg-white hover:bg-gray-50"}
-              >
-                {isDark ? <Sun size={16} /> : <Moon size={16} />}
-              </Button>
-              <Button
-                asChild
-                variant="outline"
-                className={
-                  isDark
-                    ? "border-zinc-700 text-white bg-transparent hover:bg-zinc-900"
-                    : "border-black text-black hover:bg-black hover:text-white"
-                }
-              >
-                <Link to="/hr/login">HR Portal</Link>
-              </Button>
-              <Button
-                asChild
-                className={
-                  isDark
-                    ? "bg-[#7C3AED] text-white hover:bg-[#7C3AED]/90"
-                    : "bg-black text-white hover:bg-black/90 border border-black"
-                }
-              >
-                <Link to="/upload">Start Assessment</Link>
-              </Button>
-            </div>
-          </div>
-        </header>
+        <CandidateHeader />
 
         <section className="relative min-h-[calc(100vh-56px)] flex items-center bg-transparent">
           <div className="w-full px-4">
@@ -410,68 +166,6 @@ export default function Home() {
                 GPT-4o powered evaluation with granular scoring, red flag detection, and actionable hiring insights.
               </div>
             </Card>
-          </div>
-        </section>
-
-        <section
-          id="pricing"
-          className={[
-            "py-20 transition-colors duration-300 backdrop-blur-sm",
-            isDark ? "bg-zinc-950/90" : "bg-white/90",
-          ].join(" ")}
-        >
-          <div className="max-w-6xl mx-auto px-4">
-            <PricingSection
-              heading="Assessment Plans"
-              description="Choose the right plan for your hiring needs. Scale from individual assessments to enterprise-wide deployment."
-              plans={[
-                {
-                  name: "Starter",
-                  info: "For individual candidates",
-                  price: { monthly: 0, yearly: 0 },
-                  features: [
-                    { text: "1 AI assessment per month" },
-                    { text: "Basic resume analysis" },
-                    { text: "Standard voice interview (8 questions)" },
-                    { text: "Score report with recommendations" },
-                    { text: "Email support", tooltip: "Response within 48 hours" },
-                  ],
-                  btn: { text: "Get Started Free", href: "/upload" },
-                },
-                {
-                  name: "Professional",
-                  info: "For active job seekers",
-                  highlighted: true,
-                  price: { monthly: 19, yearly: 190 },
-                  features: [
-                    { text: "Unlimited AI assessments" },
-                    { text: "Advanced ATS resume scoring" },
-                    { text: "Extended interviews (12 questions)" },
-                    { text: "Detailed radar chart analytics" },
-                    { text: "Skill gap analysis with recommendations" },
-                    { text: "Priority support", tooltip: "24/7 chat support" },
-                    { text: "Interview preparation tips", tooltip: "AI-generated prep materials" },
-                  ],
-                  btn: { text: "Start Pro Trial", href: "/upload" },
-                },
-                {
-                  name: "Enterprise",
-                  info: "For organizations & HR teams",
-                  price: { monthly: 99, yearly: 990 },
-                  features: [
-                    { text: "Unlimited team assessments" },
-                    { text: "HR Dashboard with analytics" },
-                    { text: "Custom evaluation rubrics" },
-                    { text: "Bulk candidate processing" },
-                    { text: "API access for integrations" },
-                    { text: "Dedicated account manager", tooltip: "Personal onboarding and support" },
-                    { text: "SOC 2 compliance reporting" },
-                  ],
-                  btn: { text: "Contact Sales", href: "/hr/login" },
-                },
-              ]}
-              className={isDark ? "text-zinc-50" : "text-gray-900"}
-            />
           </div>
         </section>
 

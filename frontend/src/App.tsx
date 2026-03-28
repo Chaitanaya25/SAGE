@@ -5,6 +5,8 @@ import CandidateAnalyze from "@/pages/candidate/Analyze"
 import CandidateHome from "@/pages/candidate/Home"
 import CandidateInterview from "@/pages/candidate/Interview"
 import CandidateLogin from "@/pages/candidate/Login"
+import CandidatePricing from "@/pages/candidate/Pricing"
+import CandidateSchedule from "@/pages/candidate/Schedule"
 import CandidateUpload from "@/pages/candidate/Upload"
 import Dashboard from "@/pages/hr/Dashboard"
 import HRLogin from "@/pages/hr/HRLogin"
@@ -17,6 +19,8 @@ export default function App() {
         <Route path="/" element={<Navigate to="/home" replace />} />
         <Route path="/home" element={<CandidateHome />} />
         <Route path="/analyze" element={<CandidateAnalyze />} />
+        <Route path="/schedule" element={<CandidateSchedule />} />
+        <Route path="/pricing" element={<CandidatePricing />} />
         <Route path="/login" element={<CandidateLogin />} />
         <Route path="/upload" element={<CandidateUpload />} />
         <Route path="/interview" element={<CandidateInterview />} />

@@ -1,10 +1,11 @@
 import { useMemo, useRef, useState } from "react"
-import { Link, useNavigate } from "react-router-dom"
+import { useNavigate } from "react-router-dom"
 import { CheckCircle, FileText, Loader2, Upload as UploadIcon, X as XIcon } from "lucide-react"
 import { motion } from "framer-motion"
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart } from "recharts"
 
 import AnimatedBackground from "@/components/AnimatedBackground"
+import CandidateHeader from "@/components/CandidateHeader"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -165,22 +166,18 @@ export default function Analyze() {
     <div className={["min-h-screen relative", isDark ? "bg-black text-zinc-50" : "bg-white text-gray-900"].join(" ")}>
       <AnimatedBackground variant="particles" />
 
-      <div className="relative z-10 max-w-6xl mx-auto p-8">
-        <div className="flex items-center justify-between gap-4">
+      <div className="relative z-10">
+        <CandidateHeader />
+
+        <div className="max-w-6xl mx-auto pt-24 px-4 pb-16">
           <div className="space-y-1">
             <div className="text-2xl font-semibold">ATS Resume Analysis</div>
             <div className="text-sm text-muted-foreground">
               Simulated analysis for the demo — backend integration can be added later.
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Button asChild variant="outline" className={isDark ? "border-zinc-700 bg-transparent hover:bg-zinc-900" : ""}>
-              <Link to="/home">Back to Home</Link>
-            </Button>
-          </div>
-        </div>
 
-        <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-6">
           <Card className={["p-6 backdrop-blur-sm", cardShell].join(" ")}>
             <div className="text-lg font-semibold">Upload Resume</div>
             <div className="mt-4">
@@ -493,6 +490,7 @@ export default function Analyze() {
             </div>
           </motion.div>
         ) : null}
+        </div>
       </div>
     </div>
   )
