@@ -255,7 +255,7 @@ export default function InterviewList() {
               </p>
             </div>
             <Button
-              onClick={() => navigate("/upload")}
+              onClick={() => navigate("/interview")}
               className={isDark ? "bg-[#7C3AED] hover:bg-[#7C3AED]/90 text-white" : "bg-black text-white hover:bg-black/90"}
             >
               <Plus size={16} className="mr-1.5" />
@@ -312,7 +312,7 @@ export default function InterviewList() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => navigate("/upload")}
+                              onClick={() => navigate("/interview")}
                               className={isDark ? "border-zinc-700 text-zinc-200 hover:bg-zinc-800" : ""}
                             >
                               Upload Resume
