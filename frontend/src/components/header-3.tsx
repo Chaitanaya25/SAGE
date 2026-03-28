@@ -39,10 +39,11 @@ export function Header() {
 
 	return (
 		<header
-			className={cn('sticky top-0 z-50 w-full border-b border-transparent', {
-				'bg-background/95 supports-[backdrop-filter]:bg-background/50 border-border backdrop-blur-lg':
-					scrolled,
-			})}
+			className={cn(
+				'sticky top-0 z-50 w-full border-b backdrop-blur-lg transition-colors duration-300',
+				isDark ? 'bg-zinc-950/80 border-zinc-800/60' : 'bg-white/80 border-gray-200/60',
+				scrolled ? 'shadow-sm' : undefined,
+			)}
 		>
 			<nav className="mx-auto flex h-14 w-full max-w-5xl items-center justify-between px-4">
 				<div className="flex items-center gap-6">
@@ -121,14 +122,16 @@ type MobileMenuProps = React.ComponentProps<'div'> & {
 };
 
 function MobileMenu({ open, children, className, ...props }: MobileMenuProps) {
+	const { theme } = useTheme();
+	const isDark = theme === 'dark';
 	if (!open || typeof window === 'undefined') return null;
 
 	return createPortal(
 		<div
 			id="mobile-menu"
 			className={cn(
-				'bg-background/95 supports-[backdrop-filter]:bg-background/50 backdrop-blur-lg',
-				'fixed top-14 right-0 bottom-0 left-0 z-40 flex flex-col overflow-hidden border-y md:hidden',
+				'fixed top-14 right-0 bottom-0 left-0 z-40 flex flex-col overflow-hidden border-y md:hidden backdrop-blur-lg transition-colors duration-300',
+				isDark ? 'bg-zinc-950/80 border-zinc-800/60' : 'bg-white/80 border-gray-200/60',
 			)}
 		>
 			<div

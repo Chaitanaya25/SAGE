@@ -16,7 +16,7 @@ export default function AnimatedBackground({ variant }: Props) {
           sensitivity={0.55}
           lineThickness={1}
           linesColor={theme === "dark" ? "#392e4e" : "#d1d5db"}
-          scanColor={theme === "dark" ? "#FF9FFC" : "#2563EB"}
+          scanColor={theme === "dark" ? "#FF9FFC" : "#7C3AED"}
           gridScale={0.1}
           scanOpacity={0.4}
           enablePost

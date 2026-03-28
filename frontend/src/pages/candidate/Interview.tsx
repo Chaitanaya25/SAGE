@@ -225,7 +225,7 @@ export default function Interview() {
               <button
                 type="button"
                 onClick={stopRecording}
-                className={`${commonButton} bg-[#2563EB] border-[#2563EB] text-white relative`}
+                className={`${commonButton} cursor-target bg-[#2563EB] border-[#2563EB] text-white relative`}
               >
                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#2563EB]/30" />
                 <Mic className="relative" size={28} />
@@ -246,7 +246,7 @@ export default function Interview() {
               <button
                 type="button"
                 onClick={startRecording}
-                className={`${commonButton} bg-white border-gray-200 text-gray-700 hover:border-[#2563EB]`}
+                className={`${commonButton} cursor-target bg-white border-gray-200 text-gray-700 hover:border-[#2563EB]`}
               >
                 <Mic size={28} />
               </button>
