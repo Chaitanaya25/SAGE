@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useLocation, useNavigate } from "react-router-dom"
 import { BarChart3, Calendar, CreditCard, FileSearch, LayoutDashboard, LogOut, Mic, Moon, Settings, Sun } from "lucide-react"
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart } from "recharts"
 import { flexRender, getCoreRowModel, getSortedRowModel, type ColumnDef, type SortingState, useReactTable } from "@tanstack/react-table"
@@ -51,6 +51,7 @@ const fallbackUpcoming: UpcomingInterview[] = [
 ]
 
 export default function CandidateDashboard() {
+  const location = useLocation() as unknown as { state?: { tab?: string } }
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
   const isDark = theme === "dark"
@@ -58,6 +59,18 @@ export default function CandidateDashboard() {
   const [upcoming, setUpcoming] = useState<UpcomingInterview[]>(fallbackUpcoming)
   const [roleSearch, setRoleSearch] = useState("")
   const [sorting, setSorting] = useState<SortingState>([])
+  const [stats, setStats] = useState({
+    completed: 3,
+    avgScore: 7.8,
+    nextInterview: "Mar 29",
+    resumeScore: 78,
+  })
+  const [profileName, setProfileName] = useState("")
+  const [preferredLanguage, setPreferredLanguage] = useState("English")
+  const [durationPreference, setDurationPreference] = useState<"8" | "12">("8")
+  const [emailAlerts, setEmailAlerts] = useState(true)
+  const [interviewReminders, setInterviewReminders] = useState(true)
+  const [saveMessage, setSaveMessage] = useState<string | null>(null)
 
   const tabTitles: Record<Tab, string> = {
     overview: "Overview",
@@ -71,11 +84,69 @@ export default function CandidateDashboard() {
 
   const candidate = useMemo(() => {
     try {
-      return JSON.parse(localStorage.getItem("sage_candidate") ?? "{}") as { name?: string; email?: string }
+      return JSON.parse(localStorage.getItem("sage_candidate") ?? "{}") as { id?: string; candidate_id?: string; name?: string; email?: string }
     } catch {
-      return {} as { name?: string; email?: string }
+      return {} as { id?: string; candidate_id?: string; name?: string; email?: string }
     }
   }, [])
+
+  const candidateId = candidate.id ?? candidate.candidate_id ?? localStorage.getItem("sage_candidate_id") ?? ""
+
+  const isHired = useMemo(() => {
+    try {
+      const hired = JSON.parse(localStorage.getItem("sage_hired") || "[]") as string[]
+      return Boolean(candidateId && hired.includes(candidateId))
+    } catch {
+      return false
+    }
+  }, [candidateId])
+
+  useEffect(() => {
+    const next = location.state?.tab
+    if (next === "pricing") setTab("pricing")
+  }, [location.state?.tab])
+
+  useEffect(() => {
+    setProfileName(candidate.name ?? "")
+    try {
+      const raw = localStorage.getItem("sage_candidate_settings")
+      if (!raw) return
+      const parsed = JSON.parse(raw) as {
+        name?: string
+        preferredLanguage?: string
+        durationPreference?: "8" | "12"
+        emailAlerts?: boolean
+        interviewReminders?: boolean
+      }
+      if (typeof parsed.name === "string") setProfileName(parsed.name)
+      if (typeof parsed.preferredLanguage === "string") setPreferredLanguage(parsed.preferredLanguage)
+      if (parsed.durationPreference === "8" || parsed.durationPreference === "12") setDurationPreference(parsed.durationPreference)
+      if (typeof parsed.emailAlerts === "boolean") setEmailAlerts(parsed.emailAlerts)
+      if (typeof parsed.interviewReminders === "boolean") setInterviewReminders(parsed.interviewReminders)
+    } catch {
+      return
+    }
+  }, [candidate.name])
+
+  function saveSettings() {
+    const payload = {
+      name: profileName.trim() || candidate.name || "Candidate",
+      preferredLanguage,
+      durationPreference,
+      emailAlerts,
+      interviewReminders,
+    }
+    localStorage.setItem("sage_candidate_settings", JSON.stringify(payload))
+    try {
+      const raw = localStorage.getItem("sage_candidate")
+      const cur = raw ? (JSON.parse(raw) as Record<string, unknown>) : {}
+      localStorage.setItem("sage_candidate", JSON.stringify({ ...cur, name: payload.name }))
+    } catch {
+      return
+    }
+    setSaveMessage("Saved.")
+    window.setTimeout(() => setSaveMessage(null), 2000)
+  }
 
   const chartConfig = useMemo(() => {
     const config: ChartConfig = {
@@ -117,8 +188,15 @@ export default function CandidateDashboard() {
         const arr: unknown[] =
           Array.isArray(raw) ? raw : Array.isArray((raw as { interviews?: unknown[] } | null)?.interviews) ? (raw as { interviews: unknown[] }).interviews : []
 
-        const mapped: UpcomingInterview[] = arr
-          .slice(0, 5)
+        const mine = candidateId
+          ? arr.filter((item) => {
+              const r = (item ?? {}) as Record<string, unknown>
+              return String(r.candidate_id ?? r.candidateId ?? "") === candidateId
+            })
+          : arr
+
+        const mapped: UpcomingInterview[] = mine
+          .slice(0, 8)
           .map((item, idx) => {
             const r = (item ?? {}) as Record<string, unknown>
             const statusRaw = String(r.status ?? "Pending").toLowerCase()
@@ -145,7 +223,32 @@ export default function CandidateDashboard() {
           })
           .filter((x: UpcomingInterview) => x.role !== "—")
 
-        if (mapped.length) setUpcoming(mapped)
+        if (mapped.length) {
+          setUpcoming(mapped.slice(0, 5))
+          const completed = mine.filter((item) => {
+            const r = (item ?? {}) as Record<string, unknown>
+            return String(r.status ?? "").toLowerCase() === "completed"
+          })
+          const completedCount = completed.length
+          const avgScore =
+            completedCount > 0
+              ? completed.reduce<number>((sum, item) => {
+                  const r = (item ?? {}) as Record<string, unknown>
+                  const v = Number(r.overall_score ?? r.overallScore ?? 0)
+                  return sum + (Number.isFinite(v) ? v : 0)
+                }, 0) / completedCount
+              : 0
+
+          const next = mapped.find((m) => m.status !== "Completed")?.date ?? "—"
+          const nextInterview = next === "—" ? "—" : next.split(",")[0]
+
+          setStats((prev) => ({
+            ...prev,
+            completed: completedCount,
+            avgScore: Number.isFinite(avgScore) ? Math.round(avgScore * 10) / 10 : prev.avgScore,
+            nextInterview,
+          }))
+        }
       } catch (err) {
         console.log("[SAGE] Upcoming interviews fetch failed:", err)
       } finally {
@@ -156,7 +259,7 @@ export default function CandidateDashboard() {
       window.clearTimeout(timeoutId)
       controller.abort()
     }
-  }, [])
+  }, [candidateId])
 
   const filteredUpcoming = useMemo(() => {
     const q = roleSearch.trim().toLowerCase()
@@ -203,6 +306,13 @@ export default function CandidateDashboard() {
             <Button
               size="sm"
               variant={s === "Completed" ? "outline" : "default"}
+              className={
+                s === "Completed"
+                  ? isDark
+                    ? "bg-white text-black hover:bg-white/90 border-white"
+                    : "bg-black text-white hover:bg-black/90 border-black"
+                  : undefined
+              }
               onClick={() => (s === "Completed" ? setTab("scores") : setTab("interviews"))}
             >
               {s === "Completed" ? "View Report" : "Start"}
@@ -306,22 +416,29 @@ export default function CandidateDashboard() {
         <main className="p-6">
           {tab === "overview" ? (
             <div className="space-y-6">
+              {isHired ? (
+                <div className="flex justify-end">
+                  <Badge className={isDark ? "bg-green-500/15 text-green-300 border border-green-500/25" : "bg-green-100 text-green-700 border border-green-200"}>
+                    Hired!
+                  </Badge>
+                </div>
+              ) : null}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <Card className="p-4">
                   <div className="text-sm text-muted-foreground">Interviews Completed</div>
-                  <div className="text-2xl font-semibold mt-1">3</div>
+                  <div className="text-2xl font-semibold mt-1">{stats.completed}</div>
                 </Card>
                 <Card className="p-4">
                   <div className="text-sm text-muted-foreground">Average Score</div>
-                  <div className="text-2xl font-semibold mt-1">7.8/10</div>
+                  <div className="text-2xl font-semibold mt-1">{stats.avgScore}/10</div>
                 </Card>
                 <Card className="p-4">
                   <div className="text-sm text-muted-foreground">Next Interview</div>
-                  <div className="text-2xl font-semibold mt-1">Mar 29</div>
+                  <div className="text-2xl font-semibold mt-1">{stats.nextInterview}</div>
                 </Card>
                 <Card className="p-4">
                   <div className="text-sm text-muted-foreground">Resume Score</div>
-                  <div className="text-2xl font-semibold mt-1">78%</div>
+                  <div className="text-2xl font-semibold mt-1">{stats.resumeScore}%</div>
                 </Card>
               </div>
 
@@ -450,7 +567,7 @@ export default function CandidateDashboard() {
                 <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <div className="text-sm text-muted-foreground">Name</div>
-                    <Input value={candidate.name ?? "Candidate"} readOnly />
+                    <Input value={profileName} onChange={(e) => setProfileName(e.target.value)} placeholder="Your name" />
                   </div>
                   <div className="space-y-2">
                     <div className="text-sm text-muted-foreground">Email</div>
@@ -458,15 +575,87 @@ export default function CandidateDashboard() {
                   </div>
                 </div>
               </Card>
+
               <Card className="p-6">
-                <div className="font-semibold">Appearance</div>
+                <div className="font-semibold">Preferences</div>
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <div className="text-sm text-muted-foreground">Preferred language</div>
+                    <select
+                      value={preferredLanguage}
+                      onChange={(e) => setPreferredLanguage(e.target.value)}
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    >
+                      <option value="English">English</option>
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="text-sm text-muted-foreground">Interview duration</div>
+                    <select
+                      value={durationPreference}
+                      onChange={(e) => setDurationPreference(e.target.value as "8" | "12")}
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                    >
+                      <option value="8">8 questions</option>
+                      <option value="12">12 questions</option>
+                    </select>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-6">
+                <div className="font-semibold">Notifications</div>
+                <div className="mt-4 space-y-3 text-sm">
+                  <label className="flex items-center justify-between gap-4">
+                    <span className="text-muted-foreground">Email alerts</span>
+                    <input
+                      type="checkbox"
+                      checked={emailAlerts}
+                      onChange={(e) => setEmailAlerts(e.target.checked)}
+                      className="accent-purple-600 w-4 h-4"
+                    />
+                  </label>
+                  <label className="flex items-center justify-between gap-4">
+                    <span className="text-muted-foreground">Interview reminders</span>
+                    <input
+                      type="checkbox"
+                      checked={interviewReminders}
+                      onChange={(e) => setInterviewReminders(e.target.checked)}
+                      className="accent-purple-600 w-4 h-4"
+                    />
+                  </label>
+                </div>
+              </Card>
+
+              <Card className="p-6">
+                <div className="font-semibold">Theme</div>
                 <div className="mt-4 flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">Theme</span>
+                  <span className="text-sm text-muted-foreground">Dark / Light</span>
                   <Button variant="outline" onClick={toggleTheme}>
                     {isDark ? "Dark" : "Light"}
                   </Button>
                 </div>
               </Card>
+
+              <Card className="p-6 border-red-500/20">
+                <div className="font-semibold text-red-500">Account</div>
+                <div className="mt-4 flex items-center justify-between gap-4">
+                  <div>
+                    <div className="text-sm font-medium">Delete Account</div>
+                    <div className="text-sm text-muted-foreground">For demo: action is simulated</div>
+                  </div>
+                  <Button variant="destructive" size="sm" onClick={() => console.log("Delete account")}>
+                    Delete
+                  </Button>
+                </div>
+              </Card>
+
+              <div className="flex items-center justify-between">
+                {saveMessage ? <div className="text-sm text-green-500">{saveMessage}</div> : <div />}
+                <Button onClick={saveSettings} className={isDark ? "bg-[#7C3AED] text-white hover:bg-[#7C3AED]/90" : "bg-black text-white hover:bg-black/90 border border-black"}>
+                  Save Changes
+                </Button>
+              </div>
             </div>
           ) : null}
 
@@ -493,7 +682,7 @@ export default function CandidateDashboard() {
                     name: "Pro",
                     info: "For serious job seekers",
                     highlighted: true,
-                    price: { monthly: 499, yearly: 4999 },
+                    price: { monthly: 299, yearly: 2999 },
                     features: [
                       { text: "Unlimited AI assessments" },
                       { text: "Advanced ATS scoring with JD matching" },
@@ -504,21 +693,6 @@ export default function CandidateDashboard() {
                       { text: "Interview preparation insights" },
                     ],
                     btn: { text: "Start Pro", href: "/upload" },
-                  },
-                  {
-                    name: "Enterprise",
-                    info: "For HR teams & organizations",
-                    price: { monthly: 2999, yearly: 29999 },
-                    features: [
-                      { text: "Unlimited team assessments" },
-                      { text: "HR Dashboard with full analytics" },
-                      { text: "Custom scoring rubrics" },
-                      { text: "Bulk candidate processing" },
-                      { text: "REST API access" },
-                      { text: "Dedicated account manager" },
-                      { text: "Data export & compliance" },
-                    ],
-                    btn: { text: "Contact Sales", href: "/hr/login" },
                   },
                 ]}
                 className={isDark ? "text-zinc-50" : "text-gray-900"}

@@ -251,6 +251,19 @@ export default function ReportPage() {
 
   const rec = recConfig[recommendation as keyof typeof recConfig] ?? recConfig.MAYBE
 
+  const reportCandidateId = String(interview.interview.candidate_id ?? "")
+
+  const handleHire = async () => {
+    try {
+      const hired = JSON.parse(localStorage.getItem("sage_hired") || "[]") as string[]
+      if (reportCandidateId && !hired.includes(reportCandidateId)) hired.push(reportCandidateId)
+      localStorage.setItem("sage_hired", JSON.stringify(hired))
+      alert("Candidate marked as hired!")
+    } catch {
+      alert("Failed to update hire status")
+    }
+  }
+
   return (
     <div className={["min-h-screen flex", pageBg].join(" ")}>
       {/* ── Sidebar ── */}
@@ -501,7 +514,7 @@ export default function ReportPage() {
             </Button>
             <Button
               className={isDark ? "bg-green-700 hover:bg-green-600 text-white" : "bg-green-600 hover:bg-green-700 text-white"}
-              onClick={() => console.log("Mark as hired", id)}
+              onClick={handleHire}
             >
               <UserCheck size={15} className="mr-2" />
               Mark as Hired

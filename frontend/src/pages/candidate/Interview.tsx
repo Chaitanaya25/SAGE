@@ -204,7 +204,7 @@ export default function Interview() {
           if (phaseRef.current === "live") {
             void startRecordingRef.current()
           }
-        }, 500)
+        }, 1000)
       }
     }
 
@@ -314,12 +314,12 @@ export default function Interview() {
     audioCtx.createMediaStreamSource(stream).connect(analyser)
     const volumeData = new Uint8Array(analyser.frequencyBinCount)
     let silenceTimer: ReturnType<typeof setTimeout> | null = null
-    const SILENCE_MS = 3000
+    const SILENCE_MS = 4000
 
     const silenceCheck = setInterval(() => {
       analyser.getByteFrequencyData(volumeData)
       const avg = volumeData.reduce((a, b) => a + b, 0) / volumeData.length
-      if (avg / 255 < 0.01) {
+      if (avg / 255 < 0.005) {
         if (!silenceTimer) {
           silenceTimer = setTimeout(() => {
             console.log("[SAGE] Silence detected, stopping recording")

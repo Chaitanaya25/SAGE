@@ -165,6 +165,14 @@ export function PricingCard({
 					plan.highlighted && 'bg-muted/40',
 				)}
 			>
+				{(() => {
+					const discountPercent =
+						frequency === 'yearly' && plan.price.monthly > 0 && plan.price.yearly > 0
+							? Math.round(
+									(1 - plan.price.yearly / (plan.price.monthly * 12)) * 100,
+								)
+							: null
+					return (
 				<div className="absolute top-2 right-2 z-10 flex items-center gap-2">
 					{plan.highlighted && (
 						<p className="bg-background flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs">
@@ -172,22 +180,19 @@ export function PricingCard({
 							Popular
 						</p>
 					)}
-					{frequency === 'yearly' && (
+					{typeof discountPercent === 'number' && discountPercent > 0 ? (
 						<p className="bg-primary text-primary-foreground flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs">
-							{Math.round(
-								((plan.price.monthly * 12 - plan.price.yearly) /
-									plan.price.monthly /
-									12) *
-									100,
-							)}
-							% off
+							{discountPercent}
+							<span className="ml-1">% off</span>
 						</p>
-					)}
+					) : null}
 				</div>
+					)
+				})()}
 
 				<div className="text-lg font-medium">{plan.name}</div>
 				<p className="text-muted-foreground text-sm font-normal">{plan.info}</p>
-				<h3 className="mt-2 flex items-end gap-1">
+				<h3 className="mt-2 flex items-end gap-2">
 					<span className="text-3xl font-bold">₹{plan.price[frequency]}</span>
 					<span className="text-muted-foreground">
 						{plan.name !== 'Free'
