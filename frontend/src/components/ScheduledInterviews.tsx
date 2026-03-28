@@ -2,7 +2,16 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useTheme } from "@/lib/theme-context"
 
-const scheduledInterviews = [
+export type ScheduledInterview = {
+  id: string
+  company: string
+  role: string
+  status: "Confirmed" | "Pending" | "Completed"
+  date: string
+  time: string
+}
+
+const scheduledInterviews: ScheduledInterview[] = [
   {
     id: "1",
     company: "Google",
@@ -45,7 +54,7 @@ const scheduledInterviews = [
   },
 ]
 
-export default function ScheduledInterviews() {
+export default function ScheduledInterviews({ items = scheduledInterviews }: { items?: ScheduledInterview[] }) {
   const { theme } = useTheme()
   const isDark = theme === "dark"
 
@@ -65,7 +74,7 @@ export default function ScheduledInterviews() {
       : "bg-yellow-100 text-yellow-700 border-yellow-200"
   }
 
-  const upcomingCount = scheduledInterviews.filter((i) => i.status !== "Completed").length
+  const upcomingCount = items.filter((i) => i.status !== "Completed").length
 
   return (
     <div className="w-full">
@@ -83,7 +92,7 @@ export default function ScheduledInterviews() {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {scheduledInterviews.map((interview) => (
+          {items.map((interview) => (
             <TableRow key={interview.id} className="hover:bg-muted/40">
               <TableCell className="font-medium">{interview.company}</TableCell>
               <TableCell>{interview.role}</TableCell>
@@ -118,4 +127,3 @@ export default function ScheduledInterviews() {
     </div>
   )
 }
-

@@ -313,20 +313,102 @@ export default function Dashboard() {
         </div>
 
         {activeTab === "settings" ? (
-          <Card className={["rounded-xl p-6 max-w-3xl", cardBg].join(" ")}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <Label>Account</Label>
-                <div className={["rounded-md border px-3 py-2 text-sm", isDark ? "border-zinc-800 bg-zinc-950" : "border-gray-200 bg-white"].join(" ")}>
-                  admin@sage.ai
+          <div className="max-w-2xl">
+            <h2 className="text-xl font-semibold">Settings</h2>
+            <p className={["text-sm mt-1", textMuted].join(" ")}>Account preferences and appearance</p>
+
+            <Card className={["mt-6 p-6 rounded-xl", cardBg].join(" ")}>
+              <h3 className="font-semibold mb-4">Profile</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Name</Label>
+                  <Input value="SAGE Admin" disabled />
+                </div>
+                <div className="space-y-2">
+                  <Label>Email</Label>
+                  <Input value="admin@sage.ai" disabled />
+                </div>
+                <div className="space-y-2">
+                  <Label>Role</Label>
+                  <Input value="HR Administrator" disabled />
+                </div>
+                <div className="space-y-2">
+                  <Label>Organization</Label>
+                  <Input value="SAGE Systems" disabled />
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label>Change Password</Label>
-                <Input disabled placeholder="Coming soon" />
+            </Card>
+
+            <Card className={["mt-4 p-6 rounded-xl", cardBg].join(" ")}>
+              <h3 className="font-semibold mb-4">Appearance</h3>
+              <div className="flex items-center justify-between">
+                <span className="text-sm">Dark Mode</span>
+                <button
+                  type="button"
+                  onClick={toggleTheme}
+                  className={[
+                    "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
+                    isDark ? "bg-purple-600" : "bg-gray-300",
+                  ].join(" ")}
+                  aria-label="Toggle dark mode"
+                >
+                  <span
+                    className={[
+                      "inline-block h-5 w-5 transform rounded-full bg-white transition-transform",
+                      isDark ? "translate-x-5" : "translate-x-1",
+                    ].join(" ")}
+                  />
+                </button>
               </div>
-            </div>
-          </Card>
+            </Card>
+
+            <Card className={["mt-4 p-6 rounded-xl", cardBg].join(" ")}>
+              <h3 className="font-semibold mb-4">Notifications</h3>
+              <div className="space-y-3 text-sm">
+                <div className="flex items-center justify-between gap-4">
+                  <span>Email notifications for new candidates</span>
+                  <input type="checkbox" defaultChecked className="accent-purple-600 w-4 h-4" />
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span>Weekly assessment summary</span>
+                  <input type="checkbox" defaultChecked className="accent-purple-600 w-4 h-4" />
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span>Interview completion alerts</span>
+                  <input type="checkbox" defaultChecked className="accent-purple-600 w-4 h-4" />
+                </div>
+              </div>
+            </Card>
+
+            <Card className={["mt-4 p-6 rounded-xl", cardBg].join(" ")}>
+              <h3 className="font-semibold mb-4">Security</h3>
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label>Change Password</Label>
+                  <Input type="password" placeholder="Coming soon" disabled />
+                </div>
+                <div>
+                  <Label>Two-Factor Authentication</Label>
+                  <p className={["text-sm mt-1", textMuted].join(" ")}>Coming soon</p>
+                </div>
+              </div>
+            </Card>
+
+            <Card className={["mt-4 p-6 rounded-xl", cardBg, "border-red-500/20"].join(" ")}>
+              <h3 className="font-semibold text-red-500 mb-4">Danger Zone</h3>
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-medium">Delete Account</p>
+                  <p className={["text-sm", textMuted].join(" ")}>
+                    Permanently delete your account and all data
+                  </p>
+                </div>
+                <Button variant="destructive" size="sm" onClick={() => console.log("Delete account")}>
+                  Delete
+                </Button>
+              </div>
+            </Card>
+          </div>
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
