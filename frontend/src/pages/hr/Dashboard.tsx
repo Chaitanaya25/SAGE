@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { PricingSection } from "@/components/ui/pricing"
 import {
   Table,
   TableBody,
@@ -94,7 +95,7 @@ export default function Dashboard() {
   const { theme, toggleTheme } = useTheme()
   const isDark = theme === "dark"
 
-  const [activeTab, setActiveTab] = useState<"dashboard" | "candidates" | "settings">("dashboard")
+  const [activeTab, setActiveTab] = useState<"dashboard" | "candidates" | "settings" | "pricing">("dashboard")
   const [loading, setLoading] = useState(true)
   const [rows, setRows] = useState<MockRow[]>(MOCK)
   const [query, setQuery] = useState("")
@@ -264,9 +265,9 @@ export default function Dashboard() {
             type="button"
             className={[
               "w-full flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm font-medium transition-colors",
-              inactiveNav,
+              activeTab === "pricing" ? activeNav : inactiveNav,
             ].join(" ")}
-            onClick={() => navigate("/hr/pricing")}
+            onClick={() => setActiveTab("pricing")}
           >
             <CreditCard size={16} />
             Pricing
@@ -293,12 +294,20 @@ export default function Dashboard() {
         <div className="mb-8 flex items-start justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold">
-              {activeTab === "settings" ? "Settings" : activeTab === "candidates" ? "Candidates" : "Dashboard"}
+              {activeTab === "settings"
+                ? "Settings"
+                : activeTab === "pricing"
+                  ? "Pricing"
+                  : activeTab === "candidates"
+                    ? "Candidates"
+                    : "Dashboard"}
             </h1>
             <p className={["text-sm mt-0.5", textMuted].join(" ")}>
               {activeTab === "settings"
                 ? "Account preferences and appearance"
-                : "Welcome back, SAGE Admin"}
+                : activeTab === "pricing"
+                  ? "Enterprise plans for HR teams and organizations"
+                  : "Welcome back, SAGE Admin"}
             </p>
           </div>
           <Button
@@ -408,6 +417,57 @@ export default function Dashboard() {
                 </Button>
               </div>
             </Card>
+          </div>
+        ) : activeTab === "pricing" ? (
+          <div className="max-w-6xl">
+            <PricingSection
+              heading="Enterprise Plans"
+              description="Scale candidate screening across teams with analytics, automation, and compliance controls."
+              plans={[
+                {
+                  name: "Team",
+                  info: "For small HR teams",
+                  price: { monthly: 4999, yearly: 49990 },
+                  features: [
+                    { text: "25 assessments / month" },
+                    { text: "5 HR seats" },
+                    { text: "Basic analytics" },
+                    { text: "Email support" },
+                  ],
+                  btn: { text: "Choose Team", href: "/hr/login" },
+                },
+                {
+                  name: "Business",
+                  info: "For growing organizations",
+                  highlighted: true,
+                  price: { monthly: 14999, yearly: 149990 },
+                  features: [
+                    { text: "Unlimited assessments" },
+                    { text: "20 HR seats" },
+                    { text: "Advanced analytics" },
+                    { text: "Priority support" },
+                    { text: "API access" },
+                    { text: "Custom rubrics" },
+                  ],
+                  btn: { text: "Choose Business", href: "/hr/login" },
+                },
+                {
+                  name: "Enterprise",
+                  info: "For large deployments",
+                  price: { monthly: 49999, yearly: 499990 },
+                  features: [
+                    { text: "Unlimited everything" },
+                    { text: "Unlimited HR seats" },
+                    { text: "Dedicated manager" },
+                    { text: "SSO/SAML" },
+                    { text: "SLA guarantee" },
+                    { text: "On-premise option" },
+                  ],
+                  btn: { text: "Contact Sales", href: "/hr/login" },
+                },
+              ]}
+              className={isDark ? "text-zinc-50" : "text-gray-900"}
+            />
           </div>
         ) : (
           <>

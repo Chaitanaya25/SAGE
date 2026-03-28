@@ -1,15 +1,18 @@
 import { useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { BarChart3, Calendar, FileSearch, LayoutDashboard, LogOut, Mic, Moon, Settings, Sun } from "lucide-react"
+import { BarChart3, Calendar, CreditCard, FileSearch, LayoutDashboard, LogOut, Mic, Moon, Settings, Sun } from "lucide-react"
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart } from "recharts"
 
 import { AnalyzeContent } from "@/pages/candidate/Analyze"
 import { InterviewListContent } from "@/pages/candidate/InterviewList"
 import { ScheduleContent } from "@/pages/candidate/Schedule"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { Input } from "@/components/ui/input"
+import { PricingSection } from "@/components/ui/pricing"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   Sidebar,
   SidebarContent,
@@ -26,7 +29,13 @@ import {
 } from "@/components/ui/sidebar"
 import { useTheme } from "@/lib/theme-context"
 
-type Tab = "overview" | "resume" | "interviews" | "schedule" | "scores" | "settings"
+type Tab = "overview" | "resume" | "interviews" | "schedule" | "scores" | "settings" | "pricing"
+
+const mockScheduled = [
+  { id: "1", role: "ML Engineer", date: "Mar 29, 2026", time: "10:30 AM", status: "Confirmed" },
+  { id: "2", role: "Backend Developer", date: "Apr 01, 2026", time: "2:00 PM", status: "Pending" },
+  { id: "3", role: "Software Engineer", date: "Mar 25, 2026", time: "11:00 AM", status: "Completed" },
+] as const
 
 export default function CandidateDashboard() {
   const navigate = useNavigate()
@@ -41,6 +50,7 @@ export default function CandidateDashboard() {
     schedule: "Schedule",
     scores: "Score Dashboard",
     settings: "Settings",
+    pricing: "Pricing",
   }
 
   const candidate = useMemo(() => {
@@ -132,6 +142,11 @@ export default function CandidateDashboard() {
                   <Settings className="w-4 h-4" /> Settings
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton isActive={tab === "pricing"} onClick={() => setTab("pricing")}>
+                  <CreditCard className="w-4 h-4" /> Pricing
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroup>
         </SidebarContent>
@@ -190,16 +205,55 @@ export default function CandidateDashboard() {
               </Card>
 
               <div className="flex flex-col sm:flex-row gap-3">
-                <Button className={isDark ? "bg-[#7C3AED] text-white hover:bg-[#7C3AED]/90" : "bg-black text-white hover:bg-black/90 border border-black"} onClick={() => navigate("/interview")}>
+                <Button
+                  className={isDark ? "bg-[#7C3AED] text-white hover:bg-[#7C3AED]/90" : "bg-black text-white hover:bg-black/90 border border-black"}
+                  onClick={() => setTab("interviews")}
+                >
                   New Interview
                 </Button>
-                <Button variant="outline" onClick={() => navigate("/upload")}>
+                <Button variant="outline" onClick={() => setTab("resume")}>
                   Upload Resume
                 </Button>
-                <Button variant="outline" onClick={() => navigate("/done")}>
+                <Button variant="outline" onClick={() => setTab("scores")}>
                   View Reports
                 </Button>
               </div>
+
+              <Card className="mt-6">
+                <CardHeader>
+                  <CardTitle className="text-lg">Upcoming Interviews</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Time</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {mockScheduled.map((item) => (
+                        <TableRow key={item.id}>
+                          <TableCell className="font-medium">{item.role}</TableCell>
+                          <TableCell>{item.date}</TableCell>
+                          <TableCell>{item.time}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline">{item.status}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Button size="sm" onClick={() => setTab("interviews")}>
+                              {item.status === "Completed" ? "View Report" : "Start"}
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
             </div>
           ) : null}
 
@@ -275,9 +329,64 @@ export default function CandidateDashboard() {
               </Card>
             </div>
           ) : null}
+
+          {tab === "pricing" ? (
+            <div className="max-w-6xl">
+              <PricingSection
+                heading="Assessment Plans"
+                description="Choose the right plan for your hiring needs. Scale from individual practice to advanced analytics."
+                plans={[
+                  {
+                    name: "Free",
+                    info: "For individual candidates",
+                    price: { monthly: 0, yearly: 0 },
+                    features: [
+                      { text: "1 AI assessment per month" },
+                      { text: "Resume ATS score analysis" },
+                      { text: "8-question voice interview" },
+                      { text: "Basic evaluation report" },
+                      { text: "Community support" },
+                    ],
+                    btn: { text: "Get Started", href: "/upload" },
+                  },
+                  {
+                    name: "Pro",
+                    info: "For serious job seekers",
+                    highlighted: true,
+                    price: { monthly: 499, yearly: 4999 },
+                    features: [
+                      { text: "Unlimited AI assessments" },
+                      { text: "Advanced ATS scoring with JD matching" },
+                      { text: "12-question extended interviews" },
+                      { text: "Radar chart skill analytics" },
+                      { text: "Skill gap analysis & recommendations" },
+                      { text: "Priority email support" },
+                      { text: "Interview preparation insights" },
+                    ],
+                    btn: { text: "Start Pro", href: "/upload" },
+                  },
+                  {
+                    name: "Enterprise",
+                    info: "For HR teams & organizations",
+                    price: { monthly: 2999, yearly: 29999 },
+                    features: [
+                      { text: "Unlimited team assessments" },
+                      { text: "HR Dashboard with full analytics" },
+                      { text: "Custom scoring rubrics" },
+                      { text: "Bulk candidate processing" },
+                      { text: "REST API access" },
+                      { text: "Dedicated account manager" },
+                      { text: "Data export & compliance" },
+                    ],
+                    btn: { text: "Contact Sales", href: "/hr/login" },
+                  },
+                ]}
+                className={isDark ? "text-zinc-50" : "text-gray-900"}
+              />
+            </div>
+          ) : null}
         </main>
       </SidebarInset>
     </SidebarProvider>
   )
 }
-
