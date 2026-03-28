@@ -1,7 +1,8 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { BarChart3, Calendar, CreditCard, FileSearch, LayoutDashboard, LogOut, Mic, Moon, Settings, Sun } from "lucide-react"
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart } from "recharts"
+import { flexRender, getCoreRowModel, getSortedRowModel, type ColumnDef, type SortingState, useReactTable } from "@tanstack/react-table"
 
 import { AnalyzeContent } from "@/pages/candidate/Analyze"
 import { InterviewListContent } from "@/pages/candidate/InterviewList"
@@ -27,21 +28,36 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
+import { getInterviews } from "@/lib/api"
 import { useTheme } from "@/lib/theme-context"
 
 type Tab = "overview" | "resume" | "interviews" | "schedule" | "scores" | "settings" | "pricing"
 
-const mockScheduled = [
-  { id: "1", role: "ML Engineer", date: "Mar 29, 2026", time: "10:30 AM", status: "Confirmed" },
-  { id: "2", role: "Backend Developer", date: "Apr 01, 2026", time: "2:00 PM", status: "Pending" },
-  { id: "3", role: "Software Engineer", date: "Mar 25, 2026", time: "11:00 AM", status: "Completed" },
-] as const
+type UpcomingInterview = {
+  id: string
+  role: string
+  company: string
+  date: string
+  time: string
+  status: "Confirmed" | "Pending" | "Completed"
+}
+
+const fallbackUpcoming: UpcomingInterview[] = [
+  { id: "1", role: "ML Engineer", company: "Google", date: "Mar 29, 2026", time: "10:30 AM", status: "Confirmed" },
+  { id: "2", role: "Backend Developer", company: "Meta", date: "Apr 01, 2026", time: "2:00 PM", status: "Pending" },
+  { id: "3", role: "Software Engineer", company: "Stripe", date: "Mar 25, 2026", time: "11:00 AM", status: "Completed" },
+  { id: "4", role: "Frontend Developer", company: "Vercel", date: "Apr 03, 2026", time: "9:00 AM", status: "Confirmed" },
+  { id: "5", role: "Data Analyst", company: "Anthropic", date: "Apr 05, 2026", time: "3:30 PM", status: "Pending" },
+]
 
 export default function CandidateDashboard() {
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
   const isDark = theme === "dark"
   const [tab, setTab] = useState<Tab>("overview")
+  const [upcoming, setUpcoming] = useState<UpcomingInterview[]>(fallbackUpcoming)
+  const [roleSearch, setRoleSearch] = useState("")
+  const [sorting, setSorting] = useState<SortingState>([])
 
   const tabTitles: Record<Tab, string> = {
     overview: "Overview",
@@ -91,6 +107,120 @@ export default function CandidateDashboard() {
     localStorage.clear()
     navigate("/login", { replace: true })
   }
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const timeoutId = window.setTimeout(() => controller.abort(), 3000)
+    ;(async () => {
+      try {
+        const raw = (await getInterviews(controller.signal)) as unknown
+        const arr: unknown[] =
+          Array.isArray(raw) ? raw : Array.isArray((raw as { interviews?: unknown[] } | null)?.interviews) ? (raw as { interviews: unknown[] }).interviews : []
+
+        const mapped: UpcomingInterview[] = arr
+          .slice(0, 5)
+          .map((item, idx) => {
+            const r = (item ?? {}) as Record<string, unknown>
+            const statusRaw = String(r.status ?? "Pending").toLowerCase()
+            const status: UpcomingInterview["status"] =
+              statusRaw.includes("complete") ? "Completed" : statusRaw.includes("confirm") ? "Confirmed" : "Pending"
+
+            const createdAt = typeof r.created_at === "string" ? new Date(r.created_at) : null
+            const date =
+              typeof r.date === "string"
+                ? r.date
+                : createdAt
+                  ? createdAt.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" })
+                  : "—"
+
+            const role = String(r.role ?? r.job_role ?? r.role_applied ?? "—")
+            return {
+              id: String(r.id ?? r.interview_id ?? idx),
+              role,
+              company: String(r.company ?? "—"),
+              date,
+              time: String(r.time ?? "—"),
+              status,
+            } satisfies UpcomingInterview
+          })
+          .filter((x: UpcomingInterview) => x.role !== "—")
+
+        if (mapped.length) setUpcoming(mapped)
+      } catch (err) {
+        console.log("[SAGE] Upcoming interviews fetch failed:", err)
+      } finally {
+        window.clearTimeout(timeoutId)
+      }
+    })()
+    return () => {
+      window.clearTimeout(timeoutId)
+      controller.abort()
+    }
+  }, [])
+
+  const filteredUpcoming = useMemo(() => {
+    const q = roleSearch.trim().toLowerCase()
+    if (!q) return upcoming
+    return upcoming.filter((i) => i.role.toLowerCase().includes(q))
+  }, [upcoming, roleSearch])
+
+  const interviewColumns = useMemo<ColumnDef<UpcomingInterview>[]>(() => {
+    const confirmedCls = isDark ? "bg-green-500/15 text-green-300 border-green-500/25" : "bg-green-100 text-green-700"
+    const completedCls = isDark ? "bg-blue-500/15 text-blue-300 border-blue-500/25" : "bg-blue-100 text-blue-700"
+    const pendingCls = isDark ? "bg-yellow-500/15 text-yellow-300 border-yellow-500/25" : "bg-yellow-100 text-yellow-700"
+
+    return [
+      {
+        accessorKey: "role",
+        header: "Role",
+        cell: ({ row }) => <span className="font-medium">{row.getValue("role") as string}</span>,
+      },
+      { accessorKey: "company", header: "Company" },
+      { accessorKey: "date", header: "Date" },
+      { accessorKey: "time", header: "Time" },
+      {
+        accessorKey: "status",
+        header: "Status",
+        cell: ({ row }) => {
+          const s = row.getValue("status") as string
+          const cls = s === "Confirmed" ? confirmedCls : s === "Completed" ? completedCls : pendingCls
+          return (
+            <Badge
+              variant={s === "Confirmed" ? "default" : s === "Completed" ? "secondary" : "outline"}
+              className={cls}
+            >
+              {s}
+            </Badge>
+          )
+        },
+      },
+      {
+        id: "action",
+        header: "Action",
+        cell: ({ row }) => {
+          const s = row.original.status
+          return (
+            <Button
+              size="sm"
+              variant={s === "Completed" ? "outline" : "default"}
+              onClick={() => (s === "Completed" ? setTab("scores") : setTab("interviews"))}
+            >
+              {s === "Completed" ? "View Report" : "Start"}
+            </Button>
+          )
+        },
+      },
+    ]
+  }, [isDark])
+
+  const upcomingTable = useReactTable({
+    data: filteredUpcoming,
+    columns: interviewColumns,
+    state: { sorting },
+    onSortingChange: setSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  })
 
   return (
     <SidebarProvider>
@@ -224,34 +354,44 @@ export default function CandidateDashboard() {
                   <CardTitle className="text-lg">Upcoming Interviews</CardTitle>
                 </CardHeader>
                 <CardContent>
+                  <div className="mb-3">
+                    <Input
+                      placeholder="Search by role..."
+                      value={roleSearch}
+                      onChange={(e) => setRoleSearch(e.target.value)}
+                    />
+                  </div>
                   <Table>
                     <TableHeader>
-                      <TableRow>
-                        <TableHead>Role</TableHead>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Time</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Action</TableHead>
-                      </TableRow>
+                      {upcomingTable.getHeaderGroups().map((hg) => (
+                        <TableRow key={hg.id}>
+                          {hg.headers.map((header) => (
+                            <TableHead
+                              key={header.id}
+                              className={header.column.getCanSort() ? "cursor-pointer select-none" : undefined}
+                              onClick={header.column.getToggleSortingHandler()}
+                            >
+                              {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                            </TableHead>
+                          ))}
+                        </TableRow>
+                      ))}
                     </TableHeader>
                     <TableBody>
-                      {mockScheduled.map((item) => (
-                        <TableRow key={item.id}>
-                          <TableCell className="font-medium">{item.role}</TableCell>
-                          <TableCell>{item.date}</TableCell>
-                          <TableCell>{item.time}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{item.status}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Button size="sm" onClick={() => setTab("interviews")}>
-                              {item.status === "Completed" ? "View Report" : "Start"}
-                            </Button>
-                          </TableCell>
+                      {upcomingTable.getRowModel().rows.map((row) => (
+                        <TableRow key={row.id}>
+                          {row.getVisibleCells().map((cell) => (
+                            <TableCell key={cell.id}>
+                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            </TableCell>
+                          ))}
                         </TableRow>
                       ))}
                     </TableBody>
                   </Table>
+                  <div className="mt-3 text-xs text-muted-foreground">
+                    {filteredUpcoming.length} of {upcoming.length} interviews
+                  </div>
                 </CardContent>
               </Card>
             </div>

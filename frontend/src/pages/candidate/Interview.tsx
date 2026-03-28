@@ -70,10 +70,13 @@ export default function Interview() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const mediaStreamRef   = useRef<MediaStream | null>(null)
   const chunksRef        = useRef<BlobPart[]>([])
+  const audioTimeoutRef  = useRef<number | null>(null)
 
   // Refs so WS closure always sees latest values without re-subscribing
   const phaseRef           = useRef(phase)
   phaseRef.current         = phase
+  const uiStateRef         = useRef(uiState)
+  uiStateRef.current       = uiState
   // Populated after startRecording is defined below
   const startRecordingRef  = useRef<() => Promise<void>>(async () => {})
 
@@ -101,6 +104,13 @@ export default function Interview() {
       return
     }
 
+    console.log(
+      "Live phase started. WS readyState:",
+      wsRef.current?.readyState,
+      "candidateId:",
+      candidateId
+    )
+
     const wsUrl = `${WS_URL}/${candidateId}`
     console.log("[SAGE] Connecting WebSocket:", wsUrl)
     const ws = new WebSocket(wsUrl)
@@ -123,6 +133,14 @@ export default function Interview() {
           if (typeof msg.index === "number") setQIndex(msg.index)
           if (typeof msg.text  === "string") setCurrentQuestionText(msg.text)
           setUiState("ai_speaking")
+          if (audioTimeoutRef.current) window.clearTimeout(audioTimeoutRef.current)
+          audioTimeoutRef.current = window.setTimeout(() => {
+            const s = uiStateRef.current
+            if (s !== "idle" && s !== "recording") {
+              console.log("Audio timeout — forcing idle state")
+              setUiState("idle")
+            }
+          }, 5000)
           return
         }
         if (msg.type === "transcript") {
@@ -154,6 +172,10 @@ export default function Interview() {
       console.log("[SAGE] WS binary, byteLength:", byteLen)
       const audioEl = audioRef.current
       if (!audioEl) { console.warn("[SAGE] audioRef is null"); return }
+      if (audioTimeoutRef.current) {
+        window.clearTimeout(audioTimeoutRef.current)
+        audioTimeoutRef.current = null
+      }
 
       const blob =
         event.data instanceof ArrayBuffer
@@ -172,6 +194,7 @@ export default function Interview() {
       } catch (err) {
         console.error("[SAGE] Audio play failed:", err)
         URL.revokeObjectURL(url)
+        setUiState("idle")
       }
       audioEl.onended = () => {
         URL.revokeObjectURL(url)
@@ -191,6 +214,10 @@ export default function Interview() {
     return () => {
       ws.close()
       wsRef.current = null
+      if (audioTimeoutRef.current) {
+        window.clearTimeout(audioTimeoutRef.current)
+        audioTimeoutRef.current = null
+      }
       mediaRecorderRef.current?.stop()
       mediaStreamRef.current?.getTracks().forEach((t) => t.stop())
     }
@@ -259,31 +286,26 @@ export default function Interview() {
     }
   }
 
-  // ── Recording controls ────────────────────────────────────────────────────
-  function toggleRecording() {
-    if (uiState === "recording") stopRecording()
-    else if (uiState === "idle")  startRecording()
-  }
-
   async function startRecording() {
-    const ws = wsRef.current
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-      console.warn("[SAGE] WS not open, cannot record")
-      return
-    }
-    // Guard: don't start if already recording or in a non-idle state
-    if (mediaRecorderRef.current?.state === "recording") return
+    console.log("[SAGE] startRecording called. uiState:", uiStateRef.current, "ws readyState:", wsRef.current?.readyState)
+    try {
+      const ws = wsRef.current
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        console.warn("[SAGE] WS not open, cannot record")
+        return
+      }
+      if (mediaRecorderRef.current?.state === "recording") return
 
-    setUiState("recording")
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    mediaStreamRef.current = stream
+      setUiState("recording")
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      mediaStreamRef.current = stream
 
-    const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-      ? "audio/webm;codecs=opus"
-      : "audio/webm"
-    const recorder = new MediaRecorder(stream, { mimeType })
-    mediaRecorderRef.current = recorder
-    chunksRef.current = []
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : "audio/webm"
+      const recorder = new MediaRecorder(stream, { mimeType })
+      mediaRecorderRef.current = recorder
+      chunksRef.current = []
 
     // ── Silence detection via Web Audio AnalyserNode ──
     const audioCtx = new AudioContext()
@@ -310,19 +332,23 @@ export default function Interview() {
       }
     }, 100)
 
-    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
-    recorder.onstop = () => {
-      clearInterval(silenceCheck)
-      if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null }
-      void audioCtx.close()
-      const blob = new Blob(chunksRef.current, { type: mimeType })
-      console.log("[SAGE] Sending audio blob, size:", blob.size)
-      ws.send(blob)
-      setUiState("processing")
-      stream.getTracks().forEach((t) => t.stop())
-      mediaStreamRef.current = null
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
+      recorder.onstop = () => {
+        clearInterval(silenceCheck)
+        if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null }
+        void audioCtx.close()
+        const blob = new Blob(chunksRef.current, { type: mimeType })
+        console.log("[SAGE] Sending audio blob, size:", blob.size)
+        ws.send(blob)
+        setUiState("processing")
+        stream.getTracks().forEach((t) => t.stop())
+        mediaStreamRef.current = null
+      }
+      recorder.start()
+    } catch (err) {
+      console.error("[SAGE] startRecording failed:", err)
+      setUiState("idle")
     }
-    recorder.start()
   }
   // Keep ref in sync so WS closure can call latest version
   startRecordingRef.current = startRecording
@@ -550,7 +576,17 @@ export default function Interview() {
         {/* CSS orb */}
         <div
           className={["relative w-64 h-64 md:w-80 md:h-80", isDisabled ? "cursor-default" : "cursor-pointer"].join(" ")}
-          onClick={() => !isDisabled && toggleRecording()}
+          onClick={() => {
+            console.log("Orb clicked, current state:", uiState, "ws readyState:", wsRef.current?.readyState)
+            if (isDisabled) return
+            if (uiState === "idle") {
+              console.log("Starting recording...")
+              void startRecording().catch((err) => console.error("[SAGE] startRecording error:", err))
+            } else if (uiState === "recording") {
+              console.log("Stopping recording...")
+              stopRecording()
+            }
+          }}
         >
           {uiState === "recording" && (
             <div className="absolute inset-0 rounded-full bg-purple-500/20 animate-ping" />
