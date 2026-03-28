@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import type { CSSProperties } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { ArrowRight, Eye, EyeOff, Lock, Mail, Moon, Sun } from "lucide-react"
+import { Eye, EyeOff, Lock, Mail, Moon, Sun } from "lucide-react"
 
 import AnimatedBackground from "@/components/AnimatedBackground"
 import { Button } from "@/components/ui/button"
@@ -86,7 +86,7 @@ export default function HRLogin() {
     setError(null)
     setLoading(true)
     try {
-      const result = await hrLogin(email.trim(), password)
+      const result = await hrLogin(email.trim(), password.trim())
       localStorage.setItem("sage_token", result.token)
       localStorage.setItem("sage_user", JSON.stringify(result.user))
       navigate("/hr/dashboard")
@@ -161,7 +161,7 @@ export default function HRLogin() {
 
       <header
         className={[
-          "absolute left-0 right-0 top-0 z-10 flex items-center justify-between px-6 py-4 border-b transition-colors duration-300",
+          "absolute left-0 right-0 top-0 z-20 flex items-center justify-between px-6 py-4 border-b transition-colors duration-300 pointer-events-auto",
           isDark ? "border-zinc-800/80" : "border-gray-200",
         ].join(" ")}
       >
@@ -179,24 +179,13 @@ export default function HRLogin() {
                 ? "border-zinc-800 bg-zinc-900 text-zinc-50 hover:bg-zinc-900/80"
                 : "border-gray-200 bg-white text-zinc-900 hover:bg-gray-50",
             ].join(" ")}
-            onClick={toggleTheme}
+            onClick={(e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              toggleTheme()
+            }}
           >
             {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-          </Button>
-          <Button
-            asChild
-            variant="outline"
-            className={[
-              "h-9 rounded-lg transition-colors duration-300",
-              isDark
-                ? "border-zinc-800 bg-zinc-900 text-zinc-50 hover:bg-zinc-900/80"
-                : "border-gray-200 bg-white text-zinc-900 hover:bg-gray-50",
-            ].join(" ")}
-          >
-            <Link to="/login">
-              <span className="mr-2">Candidate Portal</span>
-              <ArrowRight className="h-4 w-4" />
-            </Link>
           </Button>
         </div>
       </header>
@@ -309,7 +298,7 @@ export default function HRLogin() {
 
           <CardFooter className={["flex items-center justify-center text-sm", isDark ? "text-zinc-400" : "text-zinc-600"].join(" ")}>
             <Link className={isDark ? "text-zinc-200 hover:underline" : "text-[#2563EB] hover:underline"} to="/login">
-              ← Candidate Portal
+              Candidate? Login here
             </Link>
           </CardFooter>
         </Card>

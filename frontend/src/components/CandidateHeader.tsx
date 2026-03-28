@@ -12,6 +12,13 @@ export default function CandidateHeader() {
   const isDark = theme === "dark"
 
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null)
+  const hideHrPortal = (() => {
+    try {
+      return Boolean(localStorage.getItem("sage_candidate"))
+    } catch {
+      return false
+    }
+  })()
 
   const headerShell = isDark
     ? "bg-zinc-950/80 border-zinc-800 text-zinc-400"
@@ -132,14 +139,28 @@ export default function CandidateHeader() {
               type="button"
               size="icon"
               variant="outline"
-              onClick={toggleTheme}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+                toggleTheme()
+              }}
               className={isDark ? "border-zinc-800 bg-transparent hover:bg-zinc-900" : "border-gray-200 bg-white hover:bg-gray-50"}
             >
               {isDark ? <Sun size={16} /> : <Moon size={16} />}
             </Button>
-            <Button asChild variant="outline" className={isDark ? "border-zinc-700 text-white bg-transparent hover:bg-zinc-900" : "border-black text-black hover:bg-black hover:text-white"}>
-              <Link to="/hr/login">HR Portal</Link>
-            </Button>
+            {hideHrPortal ? null : (
+              <Button
+                asChild
+                variant="outline"
+                className={
+                  isDark
+                    ? "border-zinc-700 text-white bg-transparent hover:bg-zinc-900"
+                    : "border-black text-black hover:bg-black hover:text-white"
+                }
+              >
+                <Link to="/hr/login">HR Portal</Link>
+              </Button>
+            )}
             <Button asChild className={isDark ? "bg-[#7C3AED] text-white hover:bg-[#7C3AED]/90" : "bg-black text-white hover:bg-black/90 border border-black"}>
               <Link to="/upload">Start Assessment</Link>
             </Button>

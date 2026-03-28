@@ -47,7 +47,7 @@ export default function Interview() {
   // ── Pre-interview state ───────────────────────────────────────────────────
   const [step,        setStep]        = useState<Step>(navCandidateId ? "ready" : "upload")
   const [candidateId, setCandidateId] = useState(navCandidateId)
-  const [_interviewId, setInterviewId] = useState(navInterviewId)
+  const [, setInterviewId] = useState(navInterviewId)
   const [jobRole,     setJobRole]     = useState(navJobRole)
   const [file,        setFile]        = useState<File | null>(null)
   const [uploading,   setUploading]   = useState(false)

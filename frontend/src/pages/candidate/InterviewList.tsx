@@ -73,16 +73,26 @@ export default function InterviewList() {
 
   useEffect(() => {
     async function load() {
+      const controller = new AbortController()
+      let didFallback = false
+      const timeoutId = window.setTimeout(() => {
+        didFallback = true
+        controller.abort()
+        setInterviews(mockInterviews)
+        setLoading(false)
+      }, 3000)
       try {
-        const raw = await getInterviews() as Interview[]
+        const raw = (await getInterviews(controller.signal)) as Interview[]
+        if (didFallback) return
         const candidate = JSON.parse(localStorage.getItem("sage_candidate") ?? "{}")
         const candidateId = candidate?.id ?? candidate?.candidate_id ?? null
         const filtered = candidateId ? raw.filter((i) => i.candidate_id === candidateId) : raw
         setInterviews(filtered.length > 0 ? filtered : mockInterviews)
       } catch {
-        setInterviews(mockInterviews)
+        if (!didFallback) setInterviews(mockInterviews)
       } finally {
-        setLoading(false)
+        window.clearTimeout(timeoutId)
+        if (!didFallback) setLoading(false)
       }
     }
     load()

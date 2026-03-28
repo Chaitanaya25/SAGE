@@ -34,8 +34,8 @@ export async function getCandidates() {
   return r.json()
 }
 
-export async function getInterviews() {
-  const r = await fetch(API_URL + "/api/interviews", { headers: getHeaders() })
+export async function getInterviews(signal?: AbortSignal) {
+  const r = await fetch(API_URL + "/api/interviews", { headers: getHeaders(), signal })
   if (!r.ok) throw new Error("Failed")
   return r.json()
 }
@@ -67,4 +67,3 @@ export async function candidateLogin(email: string, name: string) {
 }
 
 export const WS_URL = "ws://localhost:8000/ws/interview"
-

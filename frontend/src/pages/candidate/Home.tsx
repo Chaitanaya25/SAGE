@@ -42,8 +42,7 @@ export default function Home() {
             <div className="mx-auto max-w-5xl py-16">
               <div className="text-5xl md:text-6xl font-bold text-center">Autonomous AI Recruitment</div>
               <div className="text-lg text-muted-foreground text-center max-w-2xl mx-auto mt-4">
-                SAGE conducts end-to-end candidate screening — from resume analysis to voice interviews to evaluation
-                reports — with zero human involvement in the loop.
+                End-to-end candidate screening. Resume parsing, voice interviews, and AI evaluation — fully autonomous.
               </div>
               <div className="mt-8 flex gap-4 justify-center">
                 <Button
