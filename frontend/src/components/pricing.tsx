@@ -105,15 +105,23 @@ export function PricingFrequencyToggle({
 		>
 			{frequencies.map((freq) => (
 				<button
+					key={freq}
 					onClick={() => setFrequency(freq)}
-					className="relative px-4 py-1 text-sm capitalize"
+					className="relative px-4 py-1 text-sm capitalize rounded-full transition-colors"
 				>
-					<span className="relative z-10">{freq}</span>
+					<span
+						className={cn(
+							"relative z-10",
+							frequency === freq ? "text-background" : "text-foreground"
+						)}
+					>
+						{freq}
+					</span>
 					{frequency === freq && (
 						<motion.span
 							layoutId="frequency"
 							transition={{ type: 'spring', duration: 0.4 }}
-							className="bg-foreground absolute inset-0 z-10 rounded-full mix-blend-difference"
+							className="bg-foreground absolute inset-0 z-0 rounded-full"
 						/>
 					)}
 				</button>

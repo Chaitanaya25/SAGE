@@ -69,12 +69,20 @@ function scoreColor(score: number | null) {
 }
 
 function StatusBadge({ status }: { status: MockRow["status"] }) {
+  const { theme } = useTheme()
+  const isDark = theme === "dark"
   const cls =
     status === "Evaluated"
-      ? "bg-green-500/10 text-green-400 border-green-500/20"
+      ? isDark
+        ? "bg-green-500/15 text-green-300 border-green-500/25"
+        : "bg-green-100 text-green-700 border-green-200"
       : status === "In Progress"
-      ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
-      : "bg-zinc-700/50 text-zinc-400 border-zinc-600/30"
+      ? isDark
+        ? "bg-blue-500/15 text-blue-300 border-blue-500/25"
+        : "bg-blue-100 text-blue-700 border-blue-200"
+      : isDark
+        ? "bg-yellow-500/15 text-yellow-300 border-yellow-500/25"
+        : "bg-yellow-100 text-yellow-700 border-yellow-200"
   return (
     <Badge variant="outline" className={["text-xs font-medium px-2 py-0.5", cls].join(" ")}>
       {status}

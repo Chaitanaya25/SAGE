@@ -2,8 +2,8 @@ import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { Eye, EyeOff, Lock, Mail, Moon, Sun, User } from "lucide-react"
 
-import AnimatedBackground from "@/components/AnimatedBackground"
 import Loader from "@/components/Loader"
+import PixelBlast from "@/components/PixelBlast.jsx"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -65,8 +65,21 @@ export default function Login() {
 
   return (
     <section className={["fixed inset-0 transition-colors duration-300", isDark ? "bg-zinc-950 text-zinc-50" : "bg-white text-zinc-950"].join(" ")}>
-      <div className={isDark ? "opacity-60" : "opacity-20"}>
-        <AnimatedBackground variant="pixelblast" />
+      <div className="fixed inset-0 z-0 pointer-events-none">
+        <div className={isDark ? "opacity-70" : "opacity-30"}>
+          <PixelBlast
+            variant="circle"
+            pixelSize={7}
+            color={isDark ? "#7C3AED" : "#0A0A0A"}
+            patternScale={7.5}
+            patternDensity={0.85}
+            pixelSizeJitter={0}
+            speed={0.9}
+            edgeFade={0.2}
+            enableRipples={false}
+            transparent
+          />
+        </div>
       </div>
 
       <header className={["absolute left-0 right-0 top-0 z-20 flex items-center justify-between px-6 py-4 border-b transition-colors duration-300 pointer-events-auto", isDark ? "border-zinc-800/80" : "border-gray-200"].join(" ")}>
@@ -103,9 +116,34 @@ export default function Login() {
 
           <CardContent className="grid gap-4">
             <Tabs value={role} onValueChange={(v) => setRole(v as "candidate" | "hr")}>
-              <TabsList className="grid grid-cols-2">
-                <TabsTrigger value="candidate">Candidate</TabsTrigger>
-                <TabsTrigger value="hr">HR Staff</TabsTrigger>
+              <TabsList
+                className={[
+                  "grid grid-cols-2",
+                  isDark ? "bg-transparent" : "bg-transparent",
+                ].join(" ")}
+              >
+                <TabsTrigger
+                  value="candidate"
+                  className={[
+                    "transition-colors",
+                    isDark
+                      ? "data-[state=active]:bg-white data-[state=active]:text-black data-[state=inactive]:bg-black data-[state=inactive]:text-white"
+                      : "data-[state=active]:bg-black data-[state=active]:text-white data-[state=inactive]:bg-white data-[state=inactive]:text-black",
+                  ].join(" ")}
+                >
+                  Candidate
+                </TabsTrigger>
+                <TabsTrigger
+                  value="hr"
+                  className={[
+                    "transition-colors",
+                    isDark
+                      ? "data-[state=active]:bg-white data-[state=active]:text-black data-[state=inactive]:bg-black data-[state=inactive]:text-white"
+                      : "data-[state=active]:bg-black data-[state=active]:text-white data-[state=inactive]:bg-white data-[state=inactive]:text-black",
+                  ].join(" ")}
+                >
+                  HR Staff
+                </TabsTrigger>
               </TabsList>
 
               <TabsContent value="candidate">
