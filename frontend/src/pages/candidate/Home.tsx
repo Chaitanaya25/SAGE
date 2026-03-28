@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import {
   Brain,
@@ -8,6 +9,8 @@ import {
 import CountUp from "@/components/CountUp"
 import AnimatedBackground from "@/components/AnimatedBackground"
 import CandidateHeader from "@/components/CandidateHeader"
+import RotatingText from "@/components/RotatingText.jsx"
+import VariableProximity from "@/components/VariableProximity.jsx"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -16,6 +19,14 @@ import { useTheme } from "@/lib/theme-context"
 export default function Home() {
   const { theme } = useTheme()
   const isDark = theme === "dark"
+  const heroRef = useRef<HTMLDivElement | null>(null)
+  const pipelineRef = useRef<HTMLDivElement | null>(null)
+  const whyRef = useRef<HTMLDivElement | null>(null)
+  const metricsHeadingRef = useRef<HTMLDivElement | null>(null)
+  const faqRef = useRef<HTMLDivElement | null>(null)
+  const ctaRef = useRef<HTMLDivElement | null>(null)
+  const metricsSectionRef = useRef<HTMLElement | null>(null)
+  const [metricsInView, setMetricsInView] = useState(false)
   const glassCard = [
     "relative overflow-hidden p-6 transition-colors duration-300 backdrop-blur-sm",
     "transition-transform duration-300 hover:-translate-y-[2px]",
@@ -24,6 +35,24 @@ export default function Home() {
   const outlineCtaClass = isDark
     ? "border-zinc-700/60 bg-transparent hover:bg-zinc-900"
     : "border-black text-black hover:bg-black hover:text-white"
+
+  useEffect(() => {
+    if (metricsInView) return
+    const el = metricsSectionRef.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const first = entries[0]
+        if (first?.isIntersecting) {
+          setMetricsInView(true)
+          observer.disconnect()
+        }
+      },
+      { threshold: 0.25 }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [metricsInView])
 
   return (
     <div
@@ -40,7 +69,28 @@ export default function Home() {
         <section className="relative min-h-[calc(100vh-56px)] flex items-center bg-transparent">
           <div className="w-full px-4">
             <div className="mx-auto max-w-5xl py-16">
-              <div className="text-5xl md:text-6xl font-bold text-center">Autonomous AI Recruitment</div>
+              <div className="text-center" ref={heroRef} style={{ position: "relative" }}>
+                <h1 className="text-5xl md:text-7xl font-bold">
+                  Autonomous AI <br />
+                  <span className="inline-flex mt-2">
+                    <RotatingText
+                      texts={["Recruitment", "Screening", "Evaluation", "Assessment"]}
+                      mainClassName={[
+                        "px-4 py-1 text-white rounded-lg",
+                        isDark ? "bg-purple-600" : "bg-blue-600",
+                      ].join(" ")}
+                      staggerFrom="last"
+                      initial={{ y: "100%" }}
+                      animate={{ y: 0 }}
+                      exit={{ y: "-120%" }}
+                      staggerDuration={0.025}
+                      splitLevelClassName="overflow-hidden pb-0.5"
+                      transition={{ type: "spring", damping: 30, stiffness: 400 }}
+                      rotationInterval={2500}
+                    />
+                  </span>
+                </h1>
+              </div>
               <div className="text-lg text-muted-foreground text-center max-w-2xl mx-auto mt-4">
                 End-to-end candidate screening. Resume parsing, voice interviews, and AI evaluation — fully autonomous.
               </div>
@@ -74,7 +124,17 @@ export default function Home() {
             isDark ? "bg-zinc-950/90" : "bg-white/90",
           ].join(" ")}
         >
-          <div className="text-3xl font-semibold text-center mb-12">Assessment Pipeline</div>
+          <div ref={pipelineRef} style={{ position: "relative" }} className="text-center mb-12">
+            <VariableProximity
+              label="Assessment Pipeline"
+              className="text-4xl md:text-5xl font-semibold"
+              fromFontVariationSettings="'wght' 400"
+              toFontVariationSettings="'wght' 900"
+              containerRef={pipelineRef}
+              radius={150}
+              falloff="linear"
+            />
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 max-w-5xl mx-auto px-4">
             <Card className={[glassCard, "text-left"].join(" ")}>
               <div
@@ -142,7 +202,17 @@ export default function Home() {
             isDark ? "bg-zinc-900/80" : "bg-gray-50/80",
           ].join(" ")}
         >
-          <div className="text-3xl font-semibold text-center mb-12">Why Organizations Choose SAGE</div>
+          <div ref={whyRef} style={{ position: "relative" }} className="text-center mb-12">
+            <VariableProximity
+              label="Why Organizations Choose SAGE"
+              className="text-4xl md:text-5xl font-semibold"
+              fromFontVariationSettings="'wght' 400"
+              toFontVariationSettings="'wght' 900"
+              containerRef={whyRef}
+              radius={150}
+              falloff="linear"
+            />
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto px-4">
             <Card className={[glassCard, "text-left"].join(" ")}>
               <Mic className="mb-4" color={isDark ? "#7C3AED" : "#2563EB"} size={36} />
@@ -170,28 +240,55 @@ export default function Home() {
 
         <section
           id="metrics"
+          ref={metricsSectionRef}
           className={[
             "w-full py-16 transition-colors duration-300",
             isDark ? "bg-zinc-900" : "bg-white",
           ].join(" ")}
         >
           <div className="max-w-4xl mx-auto px-4">
-            <div className="text-3xl font-semibold text-center mb-10">Platform Metrics</div>
+            <div ref={metricsHeadingRef} style={{ position: "relative" }} className="text-center mb-10">
+              <VariableProximity
+                label="Platform Metrics"
+                className="text-4xl md:text-5xl font-semibold"
+                fromFontVariationSettings="'wght' 400"
+                toFontVariationSettings="'wght' 900"
+                containerRef={metricsHeadingRef}
+                radius={150}
+                falloff="linear"
+              />
+            </div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
               <div className="space-y-2">
-                <CountUp to={12400} suffix="+" className="text-4xl font-bold tabular-nums" />
+                {metricsInView ? (
+                  <CountUp to={12400} suffix="+" className="text-4xl font-bold tabular-nums" />
+                ) : (
+                  <div className="text-4xl font-bold tabular-nums">12,400+</div>
+                )}
                 <div className="text-sm text-muted-foreground">Assessments Completed</div>
               </div>
               <div className="space-y-2">
-                <CountUp to={94.2} suffix="%" className="text-4xl font-bold tabular-nums" />
+                {metricsInView ? (
+                  <CountUp to={94.2} suffix="%" className="text-4xl font-bold tabular-nums" />
+                ) : (
+                  <div className="text-4xl font-bold tabular-nums">94.2%</div>
+                )}
                 <div className="text-sm text-muted-foreground">Accuracy Rate</div>
               </div>
               <div className="space-y-2">
-                <CountUp to={8.3} suffix=" min" className="text-4xl font-bold tabular-nums" />
+                {metricsInView ? (
+                  <CountUp to={8.3} suffix=" min" className="text-4xl font-bold tabular-nums" />
+                ) : (
+                  <div className="text-4xl font-bold tabular-nums">8.3 min</div>
+                )}
                 <div className="text-sm text-muted-foreground">Avg Assessment Duration</div>
               </div>
               <div className="space-y-2">
-                <CountUp to={340} suffix="+" className="text-4xl font-bold tabular-nums" />
+                {metricsInView ? (
+                  <CountUp to={340} suffix="+" className="text-4xl font-bold tabular-nums" />
+                ) : (
+                  <div className="text-4xl font-bold tabular-nums">340+</div>
+                )}
                 <div className="text-sm text-muted-foreground">Organizations Onboarded</div>
               </div>
             </div>
@@ -206,7 +303,17 @@ export default function Home() {
           ].join(" ")}
         >
           <div className="max-w-2xl mx-auto px-4">
-            <div className="text-3xl font-semibold text-center mb-12">Common Questions</div>
+            <div ref={faqRef} style={{ position: "relative" }} className="text-center mb-12">
+              <VariableProximity
+                label="Common Questions"
+                className="text-4xl md:text-5xl font-semibold"
+                fromFontVariationSettings="'wght' 400"
+                toFontVariationSettings="'wght' 900"
+                containerRef={faqRef}
+                radius={150}
+                falloff="linear"
+              />
+            </div>
             <Accordion type="single" collapsible className="w-full">
               <AccordionItem
                 value="q1"
@@ -274,7 +381,17 @@ export default function Home() {
           ].join(" ")}
         >
           <div className="max-w-2xl mx-auto text-center px-4">
-            <div className="text-3xl font-bold">Ready to Begin?</div>
+            <div ref={ctaRef} style={{ position: "relative" }} className="text-center">
+              <VariableProximity
+                label="Ready to Begin?"
+                className="text-4xl md:text-5xl font-bold"
+                fromFontVariationSettings="'wght' 400"
+                toFontVariationSettings="'wght' 900"
+                containerRef={ctaRef}
+                radius={150}
+                falloff="linear"
+              />
+            </div>
             <div className="text-muted-foreground mt-4">
               Complete your AI assessment in under 15 minutes. All you need is your resume and a microphone.
             </div>
