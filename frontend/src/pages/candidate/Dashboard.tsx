@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
-import { BarChart3, Calendar, CreditCard, FileSearch, LayoutDashboard, LogOut, Mic, Moon, Settings, Sun } from "lucide-react"
+import { BarChart3, Calendar, CreditCard, FileSearch, FileText, LayoutDashboard, LogOut, Mic, Moon, Settings, Sun } from "lucide-react"
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart } from "recharts"
 import { flexRender, getCoreRowModel, getSortedRowModel, type ColumnDef, type SortingState, useReactTable } from "@tanstack/react-table"
 
@@ -13,6 +13,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { Input } from "@/components/ui/input"
 import { PricingSection } from "@/components/ui/pricing"
+import { Progress } from "@/components/ui/progress"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   Sidebar,
@@ -31,7 +32,36 @@ import {
 import { getInterviews } from "@/lib/api"
 import { useTheme } from "@/lib/theme-context"
 
-type Tab = "overview" | "resume" | "interviews" | "schedule" | "scores" | "settings" | "pricing"
+type Tab = "overview" | "resume" | "interviews" | "schedule" | "scores" | "reports" | "settings" | "pricing"
+
+type CandidateReportRow = {
+  id: string
+  role: string
+  date: string
+  score: number
+  status: "Evaluated" | "Hired" | "Rejected"
+  recommendation: "HIRE" | "NO HIRE" | "REVIEW"
+}
+
+type CandidateReportDetail = {
+  id: string
+  overall_score: number
+  recommendation: "HIRE" | "NO HIRE" | "REVIEW"
+  scores: {
+    technical_depth: number
+    communication: number
+    relevance: number
+    confidence: number
+  }
+  strengths: string[]
+  weaknesses: string[]
+  summary: string
+}
+
+const mockReports: CandidateReportRow[] = [
+  { id: "1", role: "Software Engineer", date: "Mar 29, 2026", score: 2.3, status: "Evaluated", recommendation: "NO HIRE" },
+  { id: "2", role: "ML Engineer", date: "Mar 28, 2026", score: 7.8, status: "Hired", recommendation: "HIRE" },
+]
 
 type UpcomingInterview = {
   id: string
@@ -71,6 +101,11 @@ export default function CandidateDashboard() {
   const [emailAlerts, setEmailAlerts] = useState(true)
   const [interviewReminders, setInterviewReminders] = useState(true)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
+  const [reportRows, setReportRows] = useState<CandidateReportRow[]>(mockReports)
+  const [reportSearch, setReportSearch] = useState("")
+  const [selectedReportId, setSelectedReportId] = useState<string | null>(null)
+  const [reportDetail, setReportDetail] = useState<CandidateReportDetail | null>(null)
+  const [reportLoading, setReportLoading] = useState(false)
 
   const tabTitles: Record<Tab, string> = {
     overview: "Overview",
@@ -78,6 +113,7 @@ export default function CandidateDashboard() {
     interviews: "Voice Interviews",
     schedule: "Schedule",
     scores: "Score Dashboard",
+    reports: "My Reports",
     settings: "Settings",
     pricing: "Pricing",
   }
@@ -100,6 +136,73 @@ export default function CandidateDashboard() {
       return false
     }
   }, [candidateId])
+
+  const hiredIds = useMemo(() => {
+    try {
+      return JSON.parse(localStorage.getItem("sage_hired") || "[]") as string[]
+    } catch {
+      return [] as string[]
+    }
+  }, [])
+
+  async function loadReport(interviewId: string) {
+    setSelectedReportId(interviewId)
+    setReportLoading(true)
+    try {
+      const token = localStorage.getItem("sage_token")
+      const res = await fetch(`http://localhost:8000/api/report/${interviewId}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      })
+      if (!res.ok) throw new Error("Failed")
+      const data = (await res.json()) as unknown
+      const asRecord = (v: unknown) => (v && typeof v === "object" ? (v as Record<string, unknown>) : {})
+      const d = asRecord(data)
+      const scoresJson = asRecord(d.scores_json ?? d.scoresJson)
+      const avg = asRecord(scoresJson.average_scores ?? scoresJson.averageScores)
+      const strengths = Array.isArray(d.strengths) ? d.strengths.filter((x): x is string => typeof x === "string") : []
+      const weaknesses = Array.isArray(d.weaknesses) ? d.weaknesses.filter((x): x is string => typeof x === "string") : []
+      const recRaw = String(d.recommendation ?? "REVIEW").replace("_", " ")
+      const recommendation: CandidateReportDetail["recommendation"] =
+        recRaw === "HIRE" || recRaw === "NO HIRE" || recRaw === "REVIEW" ? (recRaw as CandidateReportDetail["recommendation"]) : "REVIEW"
+      const detail: CandidateReportDetail = {
+        id: String(d.id ?? interviewId),
+        overall_score: Number(d.overall_score ?? d.overallScore ?? 0),
+        recommendation,
+        scores: {
+          technical_depth: Number(avg.technical_depth ?? 0),
+          communication: Number(avg.communication ?? 0),
+          relevance: Number(avg.relevance ?? 0),
+          confidence: Number(avg.confidence ?? 0),
+        },
+        strengths,
+        weaknesses,
+        summary: String(d.summary ?? ""),
+      }
+      setReportDetail(detail)
+    } catch {
+      const fallback = reportRows.find((r) => r.id === interviewId) ?? reportRows[0]
+      if (fallback) {
+        setReportDetail({
+          id: fallback.id,
+          overall_score: fallback.score,
+          recommendation: fallback.recommendation,
+          scores: {
+            technical_depth: Math.max(0, Math.min(10, fallback.score + 1)),
+            communication: Math.max(0, Math.min(10, fallback.score + 0.8)),
+            relevance: Math.max(0, Math.min(10, fallback.score + 0.6)),
+            confidence: Math.max(0, Math.min(10, fallback.score + 0.4)),
+          },
+          strengths: ["Clear communication", "Relevant examples"],
+          weaknesses: ["Needs deeper technical detail"],
+          summary: "Demo report (fallback).",
+        })
+      } else {
+        setReportDetail(null)
+      }
+    } finally {
+      setReportLoading(false)
+    }
+  }
 
   useEffect(() => {
     const next = location.state?.tab
@@ -249,6 +352,38 @@ export default function CandidateDashboard() {
             nextInterview,
           }))
         }
+
+        const reportItems = mine
+          .filter((item) => {
+            const r = (item ?? {}) as Record<string, unknown>
+            const statusRaw = String(r.status ?? "").toLowerCase()
+            return statusRaw.includes("complete") || statusRaw.includes("evaluat")
+          })
+          .slice(0, 10)
+          .map((item, idx) => {
+            const r = (item ?? {}) as Record<string, unknown>
+            const createdAt = typeof r.created_at === "string" ? new Date(r.created_at) : null
+            const date =
+              typeof r.date === "string"
+                ? r.date
+                : createdAt
+                  ? createdAt.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" })
+                  : "—"
+            const score = Number(r.overall_score ?? r.overallScore ?? 0)
+            const recommendation: CandidateReportRow["recommendation"] = score >= 7.5 ? "HIRE" : score >= 5 ? "REVIEW" : "NO HIRE"
+            const baseStatus: CandidateReportRow["status"] = hiredIds.includes(candidateId) ? "Hired" : recommendation === "NO HIRE" ? "Rejected" : "Evaluated"
+            return {
+              id: String(r.id ?? r.interview_id ?? idx),
+              role: String(r.role ?? r.job_role ?? r.role_applied ?? "—"),
+              date,
+              score: Number.isFinite(score) ? Math.round(score * 10) / 10 : 0,
+              status: baseStatus,
+              recommendation,
+            } satisfies CandidateReportRow
+          })
+          .filter((r) => r.role !== "—")
+
+        if (reportItems.length) setReportRows(reportItems)
       } catch (err) {
         console.log("[SAGE] Upcoming interviews fetch failed:", err)
       } finally {
@@ -259,13 +394,19 @@ export default function CandidateDashboard() {
       window.clearTimeout(timeoutId)
       controller.abort()
     }
-  }, [candidateId])
+  }, [candidateId, hiredIds])
 
   const filteredUpcoming = useMemo(() => {
     const q = roleSearch.trim().toLowerCase()
     if (!q) return upcoming
     return upcoming.filter((i) => i.role.toLowerCase().includes(q))
   }, [upcoming, roleSearch])
+
+  const filteredReports = useMemo(() => {
+    const q = reportSearch.trim().toLowerCase()
+    if (!q) return reportRows
+    return reportRows.filter((r) => r.role.toLowerCase().includes(q))
+  }, [reportRows, reportSearch])
 
   const interviewColumns = useMemo<ColumnDef<UpcomingInterview>[]>(() => {
     const confirmedCls = isDark ? "bg-green-500/15 text-green-300 border-green-500/25" : "bg-green-100 text-green-700"
@@ -369,6 +510,11 @@ export default function CandidateDashboard() {
               <SidebarMenuItem>
                 <SidebarMenuButton isActive={tab === "scores"} onClick={() => setTab("scores")}>
                   <BarChart3 className="w-4 h-4" /> Score Dashboard
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton isActive={tab === "reports"} onClick={() => setTab("reports")}>
+                  <FileText className="w-4 h-4" /> My Reports
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
@@ -557,6 +703,154 @@ export default function CandidateDashboard() {
                   </div>
                 </div>
               </Card>
+            </div>
+          ) : null}
+
+          {tab === "reports" ? (
+            <div className="max-w-5xl space-y-4">
+              <Card className="p-6">
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <div className="font-semibold">Completed Interviews</div>
+                  <div className="w-72">
+                    <Input placeholder="Search by role..." value={reportSearch} onChange={(e) => setReportSearch(e.target.value)} />
+                  </div>
+                </div>
+
+                <div className="mt-4">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Role</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Overall Score</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredReports.map((r) => {
+                        const statusCls =
+                          r.status === "Hired"
+                            ? isDark
+                              ? "bg-green-500/15 text-green-300 border-green-500/25"
+                              : "bg-green-100 text-green-700 border-green-200"
+                            : r.status === "Rejected"
+                              ? isDark
+                                ? "bg-red-500/15 text-red-300 border-red-500/25"
+                                : "bg-red-100 text-red-700 border-red-200"
+                              : isDark
+                                ? "bg-blue-500/15 text-blue-300 border-blue-500/25"
+                                : "bg-blue-100 text-blue-700 border-blue-200"
+
+                        return (
+                          <TableRow key={r.id}>
+                            <TableCell className="font-medium">{r.role}</TableCell>
+                            <TableCell>{r.date}</TableCell>
+                            <TableCell className="tabular-nums">{r.score.toFixed(1)}/10</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className={statusCls}>
+                                {r.status}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className={isDark ? "bg-white text-black hover:bg-white/90 border-white" : "bg-black text-white hover:bg-black/90 border-black"}
+                                onClick={() => void loadReport(r.id)}
+                              >
+                                View Report
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                  <div className="mt-3 text-xs text-muted-foreground">
+                    {filteredReports.length} of {reportRows.length} reports
+                  </div>
+                </div>
+              </Card>
+
+              {reportLoading ? (
+                <Card className="p-6">
+                  <div className="text-sm text-muted-foreground">Loading report…</div>
+                </Card>
+              ) : reportDetail ? (
+                <Card className="p-6">
+                  <div className="flex items-start justify-between gap-4 flex-wrap">
+                    <div>
+                      <div className="font-semibold">Report</div>
+                      <div className="text-sm text-muted-foreground">Interview ID: {reportDetail.id}</div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div
+                        className={[
+                          "text-3xl font-bold tabular-nums",
+                          reportDetail.overall_score >= 7.5
+                            ? isDark ? "text-green-300" : "text-green-700"
+                            : reportDetail.overall_score >= 5
+                              ? isDark ? "text-amber-300" : "text-amber-700"
+                              : isDark ? "text-red-300" : "text-red-700",
+                        ].join(" ")}
+                      >
+                        {reportDetail.overall_score.toFixed(1)}
+                      </div>
+                      <Badge variant="outline">
+                        {reportDetail.recommendation}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {([
+                      ["Technical", reportDetail.scores.technical_depth],
+                      ["Communication", reportDetail.scores.communication],
+                      ["Relevance", reportDetail.scores.relevance],
+                      ["Confidence", reportDetail.scores.confidence],
+                    ] as [string, number][]).map(([label, val]) => (
+                      <div key={label} className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">{label}</span>
+                          <span className="text-sm font-semibold tabular-nums">{val.toFixed(1)}/10</span>
+                        </div>
+                        <Progress value={Math.max(0, Math.min(100, val * 10))} />
+                      </div>
+                    ))}
+                  </div>
+
+                  {reportDetail.summary ? (
+                    <div className="mt-6">
+                      <div className="font-semibold">Summary</div>
+                      <p className="mt-2 text-sm text-muted-foreground">{reportDetail.summary}</p>
+                    </div>
+                  ) : null}
+
+                  <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <div className="font-semibold">Strengths</div>
+                      <ul className="mt-2 space-y-2 text-sm text-muted-foreground">
+                        {(reportDetail.strengths.length ? reportDetail.strengths : ["—"]).map((s, idx) => (
+                          <li key={idx}>{s}</li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <div className="font-semibold">Areas for improvement</div>
+                      <ul className="mt-2 space-y-2 text-sm text-muted-foreground">
+                        {(reportDetail.weaknesses.length ? reportDetail.weaknesses : ["—"]).map((s, idx) => (
+                          <li key={idx}>{s}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                </Card>
+              ) : selectedReportId ? (
+                <Card className="p-6">
+                  <div className="text-sm text-muted-foreground">Report not available.</div>
+                </Card>
+              ) : null}
             </div>
           ) : null}
 

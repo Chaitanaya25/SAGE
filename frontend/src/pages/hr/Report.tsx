@@ -13,6 +13,7 @@ import {
   RadarChart,
   PolarGrid,
   PolarAngleAxis,
+  PolarRadiusAxis,
   ResponsiveContainer,
 } from "recharts"
 
@@ -198,13 +199,20 @@ export default function ReportPage() {
     return out
   }, [report])
 
-  const radarData = useMemo(() =>
-    SCORE_DIMENSIONS.map((d) => ({
-      subject: d.label.split(" ")[0], // "Technical", "Communication", etc.
-      value: averageScores[d.key] * 10, // scale 0–100
-    })),
-    [averageScores]
-  )
+  const radarData = useMemo(() => {
+    const scores = averageScores
+    const reportAny = report as unknown as Record<string, unknown>
+    const pick = (k: string, fallback: number) => {
+      const v = Number(reportAny[k])
+      return Number.isFinite(v) ? v : fallback
+    }
+    return [
+      { dimension: "Technical", score: pick("technical_depth", scores.technical_depth || 0) },
+      { dimension: "Communication", score: pick("communication", scores.communication || 0) },
+      { dimension: "Relevance", score: pick("relevance", scores.relevance || 0) },
+      { dimension: "Confidence", score: pick("confidence", scores.confidence || 0) },
+    ]
+  }, [averageScores, report])
 
   // ── Theme classes ──────────────────────────────────────────────────────────
   const pageBg     = isDark ? "bg-zinc-950 text-zinc-50"   : "bg-[#FAFAFA] text-[#0A0A0A]"
@@ -357,12 +365,13 @@ export default function ReportPage() {
                   <RadarChart data={radarData}>
                     <PolarGrid stroke={isDark ? "#3f3f46" : "#e5e7eb"} />
                     <PolarAngleAxis
-                      dataKey="subject"
+                      dataKey="dimension"
                       tick={{ fontSize: 11, fill: isDark ? "#a1a1aa" : "#6b7280" }}
                     />
+                    <PolarRadiusAxis domain={[0, 10]} tick={false} axisLine={false} />
                     <Radar
                       name="Score"
-                      dataKey="value"
+                      dataKey="score"
                       stroke={isDark ? "#7C3AED" : "#2563EB"}
                       fill={isDark ? "#7C3AED" : "#2563EB"}
                       fillOpacity={0.25}

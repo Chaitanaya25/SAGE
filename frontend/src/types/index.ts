@@ -48,7 +48,7 @@ export interface Report {
 }
 
 export interface WebSocketMessage {
-  type: "question" | "transcript" | "status" | "complete" | "error" | "warning"
+  type: "greeting" | "question" | "transcript" | "status" | "complete" | "error" | "warning"
   text?: string
   message?: string
   index?: number

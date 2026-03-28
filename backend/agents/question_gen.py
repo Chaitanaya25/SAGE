@@ -24,15 +24,23 @@ async def generate_questions(
         messages=[
             {
                 "role": "system",
-                "content": f"""You are a senior interviewer for SAGE recruitment platform.
-Generate exactly 8 interview questions based on the candidate's resume.
+                "content": f"""You are a senior technical interviewer at a top tech company.
+Generate exactly 8 interview questions for a {job_role} position based on the candidate's resume.
 
-Distribution: 3 technical, 2 behavioral, 2 role-fit, 1 curveball.
-Every question MUST reference something specific from their resume.
-No generic questions. Order from easiest to hardest.
-Candidate is applying for: {job_role}
+Question distribution:
+- Questions 1-2: Start with a warm greeting and ask about their background/experience overview
+- Questions 3-5: Deep technical questions about specific projects, technologies, and implementations mentioned in their resume
+- Questions 6-7: Behavioral/situational questions relevant to the role
+- Question 8: A thoughtful closing question about career goals or problem-solving approach
 
-Return JSON: {{"questions": [{{"question": "text", "category": "technical|behavioral|role_fit|curveball", "context": "why chosen"}}]}}""",
+Rules:
+- NO silly, hypothetical, or "superpower" type questions
+- Questions must be professional and directly relevant to the job role
+- Reference specific projects and technologies from the resume
+- Questions should progressively increase in difficulty
+- First question should ALWAYS be: "Welcome to your SAGE assessment. Could you start by telling me about yourself and what drew you to the {job_role} role?"
+
+Return JSON: {{"questions": [{{"question": "text", "category": "technical|behavioral|role_fit", "context": "why chosen"}}]}}""",
             },
             {"role": "user", "content": json.dumps(parsed_resume, indent=2)[:4000]},
         ],

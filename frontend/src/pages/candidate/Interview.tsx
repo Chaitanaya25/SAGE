@@ -63,7 +63,6 @@ export default function Interview() {
   const [qTotal,              setQTotal]              = useState(8)
   const [elapsed,             setElapsed]             = useState(0)
   const [currentQuestionText, setCurrentQuestionText] = useState("")
-  const [lastCandidateAnswer, setLastCandidateAnswer] = useState("")
 
   const wsRef            = useRef<WebSocket | null>(null)
   const audioRef         = useRef<HTMLAudioElement | null>(null)
@@ -71,6 +70,7 @@ export default function Interview() {
   const mediaStreamRef   = useRef<MediaStream | null>(null)
   const chunksRef        = useRef<BlobPart[]>([])
   const audioTimeoutRef  = useRef<number | null>(null)
+  const lastSpokenTypeRef = useRef<"greeting" | "question" | null>(null)
 
   // Refs so WS closure always sees latest values without re-subscribing
   const phaseRef           = useRef(phase)
@@ -128,10 +128,17 @@ export default function Interview() {
         let msg: WebSocketMessage
         try { msg = JSON.parse(event.data) as WebSocketMessage } catch { return }
 
+        if (msg.type === "greeting") {
+          if (typeof msg.text === "string") setCurrentQuestionText(msg.text)
+          lastSpokenTypeRef.current = "greeting"
+          setUiState("ai_speaking")
+          return
+        }
         if (msg.type === "question") {
           if (typeof msg.total === "number") setQTotal(msg.total)
           if (typeof msg.index === "number") setQIndex(msg.index)
           if (typeof msg.text  === "string") setCurrentQuestionText(msg.text)
+          lastSpokenTypeRef.current = "question"
           setUiState("ai_speaking")
           if (audioTimeoutRef.current) window.clearTimeout(audioTimeoutRef.current)
           audioTimeoutRef.current = window.setTimeout(() => {
@@ -141,10 +148,6 @@ export default function Interview() {
               setUiState("idle")
             }
           }, 5000)
-          return
-        }
-        if (msg.type === "transcript") {
-          if (typeof msg.text === "string") setLastCandidateAnswer(msg.text)
           return
         }
         if (msg.type === "status") {
@@ -199,12 +202,16 @@ export default function Interview() {
       audioEl.onended = () => {
         URL.revokeObjectURL(url)
         setUiState((s) => (s === "ai_speaking" ? "idle" : s))
-        console.log("[SAGE] AI finished speaking, auto-starting mic...")
-        setTimeout(() => {
-          if (phaseRef.current === "live") {
-            void startRecordingRef.current()
-          }
-        }, 1000)
+        if (lastSpokenTypeRef.current === "question") {
+          console.log("[SAGE] AI finished speaking, auto-starting mic...")
+          setTimeout(() => {
+            if (phaseRef.current === "live") {
+              void startRecordingRef.current()
+            }
+          }, 1000)
+        } else {
+          console.log("[SAGE] Audio finished (no auto-start)")
+        }
       }
     }
 
@@ -629,7 +636,7 @@ export default function Interview() {
           {uiState === "connecting"  && <p className="text-zinc-500 text-lg">Connecting…</p>}
         </div>
 
-        {/* Question + last answer */}
+        {/* Question */}
         <div className="max-w-2xl w-full text-center">
           {currentQuestionText && (
             <div className="mb-4">
@@ -639,12 +646,6 @@ export default function Interview() {
               <p className="text-xl font-medium text-zinc-100 leading-relaxed">
                 {currentQuestionText}
               </p>
-            </div>
-          )}
-          {lastCandidateAnswer && uiState !== "recording" && (
-            <div className="mt-4 opacity-60">
-              <p className="text-sm text-zinc-500">Your answer:</p>
-              <p className="text-sm text-zinc-300 italic line-clamp-3">{lastCandidateAnswer}</p>
             </div>
           )}
         </div>

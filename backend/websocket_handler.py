@@ -138,6 +138,19 @@ async def interview_websocket(websocket: WebSocket, candidate_id: str) -> None:
     total = len(questions)
     responses_collected: List[Dict[str, Any]] = []
 
+    job_role = str(interview.get("job_role", "") or "")
+    greeting_text = (
+        f"Welcome to your SAGE assessment for the {job_role} position. "
+        f"I'll be asking you {total} questions based on your resume. "
+        "Take your time with each answer. Let's begin."
+    )
+    await websocket.send_json({"type": "greeting", "text": greeting_text})
+    greeting_audio = await text_to_speech(greeting_text)
+    if greeting_audio:
+        await websocket.send_bytes(greeting_audio)
+        est = max(2.0, min(6.0, len(greeting_text.split()) / 2.5))
+        await asyncio.sleep(est)
+
     first_q = questions[0]
     first_text = _question_text(first_q)
     await websocket.send_json(
