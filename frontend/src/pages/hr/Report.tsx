@@ -23,10 +23,10 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { getCandidates, getInterview, getQuestions, getReport } from "@/lib/api"
+import { getCandidates, getInterview, getQuestions } from "@/lib/api"
 import { SCORE_DIMENSIONS } from "@/lib/constants"
 import { useTheme } from "@/lib/theme-context"
-import type { Candidate, Question, Report, ScoreBreakdown } from "@/types"
+import type { Candidate, Question, ScoreBreakdown } from "@/types"
 
 // ── Mock data ─────────────────────────────────────────────────────────────────
 
@@ -38,39 +38,6 @@ const MOCK_CANDIDATE: Candidate = {
   resume_url: null,
   resume_parsed: {},
   created_at: "2026-03-28T14:00:00Z",
-}
-
-const MOCK_REPORT: Report = {
-  id: "report-mock-1",
-  interview_id: "mock-interview-1",
-  overall_score: 8.2,
-  scores_json: {
-    average_scores: {
-      technical_depth: 8.5,
-      communication: 8.0,
-      relevance: 8.2,
-      confidence: 7.9,
-    },
-  },
-  strengths: [
-    "Strong grasp of ML fundamentals and model evaluation",
-    "Clear communication of complex concepts",
-    "Demonstrated hands-on experience with PyTorch and scikit-learn",
-    "Good understanding of production deployment challenges",
-  ],
-  weaknesses: [
-    "Limited experience with large-scale distributed training",
-    "Could improve on MLOps tooling knowledge (MLflow, Kubeflow)",
-    "Occasionally verbose — could be more concise",
-  ],
-  recommendation: "HIRE",
-  summary:
-    "Rahul demonstrated a well-rounded ML engineering background with solid fundamentals and practical project experience. His answers were technically accurate and clearly communicated. A strong candidate for the ML Engineer role.",
-  suggested_follow_up: [
-    "Deep-dive on distributed training frameworks",
-    "System design for a real-time recommendation pipeline",
-  ],
-  created_at: "2026-03-28T15:30:00Z",
 }
 
 const MOCK_QUESTIONS: Question[] = [
@@ -114,6 +81,27 @@ type InterviewPayload = {
   responses: InterviewResponseRow[]
 }
 
+type ReportView = {
+  id?: string
+  interview_id?: string
+  candidate_name?: string
+  candidate_email?: string
+  job_role?: string
+  overall_score?: number
+  technical_depth?: number
+  communication?: number
+  relevance?: number
+  confidence?: number
+  scores?: Partial<ScoreBreakdown>
+  scores_json?: Record<string, unknown>
+  scoresJson?: Record<string, unknown>
+  recommendation?: string
+  strengths?: string[]
+  weaknesses?: string[]
+  summary?: string
+  transcript?: unknown[]
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatDate(value?: string | null) {
@@ -144,7 +132,8 @@ export default function ReportPage() {
   const isDark = theme === "dark"
 
   const [loading, setLoading] = useState(true)
-  const [report, setReport] = useState<Report | null>(null)
+  const [report, setReport] = useState<ReportView | null>(null)
+  const [error, setError] = useState("")
   const [interview, setInterview] = useState<InterviewPayload | null>(null)
   const [candidate, setCandidate] = useState<Candidate | null>(null)
   const [questions, setQuestions] = useState<Question[]>([])
@@ -154,8 +143,18 @@ export default function ReportPage() {
     async function load() {
       if (!id) return
       setLoading(true)
+      setError("")
       try {
-        const [r, iv, q] = await Promise.all([getReport(id), getInterview(id), getQuestions(id)])
+        const controller = new AbortController()
+        const timeout = window.setTimeout(() => controller.abort(), 10000)
+        const reportUrl = `http://localhost:8000/api/report/${id}`
+        const reportRes = await fetch(reportUrl, { signal: controller.signal })
+        window.clearTimeout(timeout)
+        if (!reportRes.ok) throw new Error("Report not found")
+        const r = await reportRes.json()
+        console.log("Report data:", r)
+
+        const [iv, q] = await Promise.all([getInterview(id), getQuestions(id)])
         if (cancelled) return
         setReport(r)
         setInterview(iv)
@@ -165,9 +164,24 @@ export default function ReportPage() {
         const all = (candidatesRes.candidates ?? []) as Candidate[]
         const found = all.find((c) => c.id === iv.interview.candidate_id) ?? null
         setCandidate(found)
-      } catch {
+      } catch (e: unknown) {
         if (cancelled) return
-        setReport(MOCK_REPORT)
+        console.error("Failed to load report:", e)
+        setError(e instanceof Error ? e.message : "Failed to load report")
+        setReport({
+          candidate_name: "Unknown",
+          candidate_email: "",
+          job_role: "Unknown",
+          overall_score: 0,
+          technical_depth: 0,
+          communication: 0,
+          relevance: 0,
+          confidence: 0,
+          recommendation: "REVIEW",
+          strengths: ["Data not available"],
+          weaknesses: ["Report not generated yet"],
+          transcript: [],
+        })
         setInterview({
           interview: { id: id ?? "mock", candidate_id: "mock-1", job_role: "ML Engineer", created_at: "2026-03-28T14:00:00Z" },
           responses: MOCK_RESPONSES,
@@ -188,31 +202,44 @@ export default function ReportPage() {
     return m
   }, [questions])
 
-  const averageScores = useMemo(() => {
-    const scoresJson = report?.scores_json as { average_scores?: Record<string, number> } | undefined
-    const avg = scoresJson?.average_scores ?? {}
-    const out: Record<string, number> = {}
-    for (const dim of SCORE_DIMENSIONS) {
-      const v = Number(avg[dim.key])
-      out[dim.key] = Number.isFinite(v) ? v : 0
+  const scores = useMemo(() => {
+    return {
+      technical_depth: report?.technical_depth ?? report?.scores?.technical_depth ?? 0,
+      communication: report?.communication ?? report?.scores?.communication ?? 0,
+      relevance: report?.relevance ?? report?.scores?.relevance ?? 0,
+      confidence: report?.confidence ?? report?.scores?.confidence ?? 0,
     }
-    return out
   }, [report])
 
+  const averageScores = useMemo(() => {
+    const scoresJson = report?.scores_json ?? report?.scoresJson
+    const scoresObj = scoresJson && typeof scoresJson === "object" ? (scoresJson as Record<string, unknown>) : undefined
+    const avgRaw = (scoresObj?.average_scores ?? scoresObj?.averageScores) as unknown
+    const avg = avgRaw && typeof avgRaw === "object" ? (avgRaw as Record<string, unknown>) : undefined
+    const out: Record<string, number> = {}
+    for (const dim of SCORE_DIMENSIONS) {
+      const vFromJson = Number(avg?.[dim.key])
+      const vFromDirect = Number((scores as Record<string, number>)[dim.key])
+      const v = Number.isFinite(vFromJson) ? vFromJson : Number.isFinite(vFromDirect) ? vFromDirect : 0
+      out[dim.key] = v
+    }
+    return out
+  }, [report, scores])
+
   const radarData = useMemo(() => {
-    const scores = averageScores
-    const reportAny = report as unknown as Record<string, unknown>
-    const pick = (k: string, fallback: number) => {
-      const v = Number(reportAny[k])
-      return Number.isFinite(v) ? v : fallback
+    const pick = (k: keyof typeof averageScores) => {
+      const v1 = Number(averageScores[k])
+      if (Number.isFinite(v1) && v1 !== 0) return v1
+      const v2 = Number((scores as Record<string, number>)[k])
+      return Number.isFinite(v2) ? v2 : 0
     }
     return [
-      { dimension: "Technical", score: pick("technical_depth", scores.technical_depth || 0) },
-      { dimension: "Communication", score: pick("communication", scores.communication || 0) },
-      { dimension: "Relevance", score: pick("relevance", scores.relevance || 0) },
-      { dimension: "Confidence", score: pick("confidence", scores.confidence || 0) },
+      { dimension: "Technical", score: pick("technical_depth") },
+      { dimension: "Communication", score: pick("communication") },
+      { dimension: "Relevance", score: pick("relevance") },
+      { dimension: "Confidence", score: pick("confidence") },
     ]
-  }, [averageScores, report])
+  }, [averageScores, scores])
 
   // ── Theme classes ──────────────────────────────────────────────────────────
   const pageBg     = isDark ? "bg-zinc-950 text-zinc-50"   : "bg-[#FAFAFA] text-[#0A0A0A]"
@@ -225,14 +252,19 @@ export default function ReportPage() {
   // ── Loading ────────────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className={["min-h-screen flex", pageBg].join(" ")}>
-        {/* Sidebar skeleton */}
-        <aside className={["w-64 min-h-screen border-r flex-shrink-0", sidebarBg].join(" ")} />
-        <main className="flex-1 p-8 space-y-6 max-w-4xl">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className={["h-40 rounded-xl animate-pulse", isDark ? "bg-zinc-800" : "bg-gray-100"].join(" ")} />
-          ))}
-        </main>
+      <div className={["flex items-center justify-center min-h-screen", pageBg].join(" ")}>
+        <div className="text-center">
+          <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto mb-4" />
+          <p>Loading report...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error && !report) {
+    return (
+      <div className={["flex items-center justify-center min-h-screen", pageBg].join(" ")}>
+        <p className="text-red-500">Error: {error}</p>
       </div>
     )
   }
@@ -248,8 +280,11 @@ export default function ReportPage() {
     )
   }
 
-  const overallScore = typeof report.overall_score === "number" ? report.overall_score : 0
-  const recommendation = report.recommendation ?? (overallScore >= 7.5 ? "HIRE" : overallScore >= 5 ? "MAYBE" : "NO_HIRE")
+  const overallScore =
+    typeof report?.overall_score === "number"
+      ? report.overall_score
+      : (scores.technical_depth * 0.35 + scores.communication * 0.25 + scores.relevance * 0.25 + scores.confidence * 0.15) || 0
+  const recommendation = report?.recommendation ?? (overallScore >= 7.5 ? "HIRE" : overallScore >= 5 ? "MAYBE" : "NO_HIRE")
 
   const recConfig = {
     HIRE:    { label: "HIRE",     bg: isDark ? "bg-green-900/40 text-green-400 border-green-700" : "bg-green-100 text-green-700 border-green-300" },

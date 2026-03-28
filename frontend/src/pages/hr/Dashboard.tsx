@@ -288,7 +288,7 @@ export default function Dashboard() {
             className={["w-full flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm transition-colors", inactiveNav].join(" ")}
             onClick={() => {
               localStorage.removeItem("sage_token")
-              navigate("/hr/login", { replace: true })
+                  navigate("/login", { replace: true })
             }}
           >
             <LogOut size={16} />
