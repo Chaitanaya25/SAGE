@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
-import { CheckCircle, CheckSquare, Loader2, Mic, Square, Timer, Upload, Volume2, X } from "lucide-react"
+import { CheckCircle, CheckSquare, Mic, Square, Timer, Upload, Volume2, X } from "lucide-react"
 
+import Loader from "@/components/Loader"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -424,7 +425,12 @@ export default function Interview() {
             disabled={uploading || !file || !jobRole}
           >
             {uploading ? (
-              <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Analyzing Resume…</>
+              <span className="inline-flex items-center">
+                <span className="mr-2 inline-flex">
+                  <Loader size={16} color="#FFFFFF" />
+                </span>
+                Analyzing Resume…
+              </span>
             ) : (
               "Continue"
             )}
@@ -569,7 +575,7 @@ export default function Interview() {
               ? "bg-gradient-to-br from-green-600 to-green-800 shadow-2xl shadow-green-500/40"
               : "bg-gradient-to-br from-zinc-700 to-zinc-900 hover:from-zinc-600 hover:to-zinc-800",
           ].join(" ")}>
-            {uiState === "processing"  ? <Loader2  className="w-12 h-12 text-white animate-spin" /> :
+            {uiState === "processing"  ? <Loader size={48} color="#FFFFFF" /> :
              uiState === "ai_speaking" ? <Volume2  className="w-12 h-12 text-white" /> :
              uiState === "recording"   ? <Mic      className="w-12 h-12 text-white animate-pulse" /> :
              uiState === "complete"    ? <CheckCircle className="w-12 h-12 text-white" /> :

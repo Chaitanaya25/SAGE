@@ -1,21 +1,26 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import {
   BarChart3,
   CheckCircle,
+  CreditCard,
   LayoutDashboard,
   LogOut,
+  Moon,
   Search,
   Settings,
   TrendingUp,
+  Sun,
   Users,
 } from "lucide-react"
 
 import CountUp from "@/components/CountUp"
+import Loader from "@/components/Loader"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   Table,
   TableBody,
@@ -86,12 +91,14 @@ function formatDate(v?: string | null) {
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const { theme } = useTheme()
+  const { theme, toggleTheme } = useTheme()
   const isDark = theme === "dark"
 
+  const [activeTab, setActiveTab] = useState<"dashboard" | "candidates" | "settings">("dashboard")
   const [loading, setLoading] = useState(true)
   const [rows, setRows] = useState<MockRow[]>(MOCK)
   const [query, setQuery] = useState("")
+  const candidatesRef = useRef<HTMLDivElement | null>(null)
 
   const [stats, setStats] = useState({
     totalCandidates: 47,
@@ -173,6 +180,11 @@ export default function Dashboard() {
     return () => { cancelled = true }
   }, [])
 
+  useEffect(() => {
+    if (activeTab !== "candidates") return
+    candidatesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }, [activeTab])
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     if (!q) return rows
@@ -215,26 +227,53 @@ export default function Dashboard() {
         </div>
 
         <nav className="flex-1 px-3 space-y-1">
-          {[
-            { icon: LayoutDashboard, label: "Dashboard", active: true  },
-            { icon: Users,           label: "Candidates", active: false },
-            { icon: Settings,        label: "Settings",   active: false },
-          ].map(({ icon: Icon, label, active }) => (
-            <button
-              key={label}
-              type="button"
-              className={[
-                "w-full flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm font-medium transition-colors",
-                active ? activeNav : inactiveNav,
-              ].join(" ")}
-            >
-              <Icon size={16} />
-              {label}
-            </button>
-          ))}
+          <button
+            type="button"
+            className={[
+              "w-full flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm font-medium transition-colors",
+              activeTab === "dashboard" ? activeNav : inactiveNav,
+            ].join(" ")}
+            onClick={() => setActiveTab("dashboard")}
+          >
+            <LayoutDashboard size={16} />
+            Dashboard
+          </button>
+          <button
+            type="button"
+            className={[
+              "w-full flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm font-medium transition-colors",
+              activeTab === "candidates" ? activeNav : inactiveNav,
+            ].join(" ")}
+            onClick={() => setActiveTab("candidates")}
+          >
+            <Users size={16} />
+            Candidates
+          </button>
+          <button
+            type="button"
+            className={[
+              "w-full flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm font-medium transition-colors",
+              activeTab === "settings" ? activeNav : inactiveNav,
+            ].join(" ")}
+            onClick={() => setActiveTab("settings")}
+          >
+            <Settings size={16} />
+            Settings
+          </button>
+          <button
+            type="button"
+            className={[
+              "w-full flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm font-medium transition-colors",
+              inactiveNav,
+            ].join(" ")}
+            onClick={() => navigate("/hr/pricing")}
+          >
+            <CreditCard size={16} />
+            Pricing
+          </button>
         </nav>
 
-        <div className="p-4 border-t border-zinc-800">
+        <div className={["p-4 border-t", borderRow].join(" ")}>
           <button
             type="button"
             className={["w-full flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm transition-colors", inactiveNav].join(" ")}
@@ -251,118 +290,155 @@ export default function Dashboard() {
 
       {/* ── Main ── */}
       <main className="ml-64 flex-1 p-8">
-
-        {/* Page heading */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-semibold">Dashboard</h1>
-          <p className={["text-sm mt-0.5", textMuted].join(" ")}>Welcome back, SAGE Admin</p>
+        <div className="mb-8 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold">
+              {activeTab === "settings" ? "Settings" : activeTab === "candidates" ? "Candidates" : "Dashboard"}
+            </h1>
+            <p className={["text-sm mt-0.5", textMuted].join(" ")}>
+              {activeTab === "settings"
+                ? "Account preferences and appearance"
+                : "Welcome back, SAGE Admin"}
+            </p>
+          </div>
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            onClick={toggleTheme}
+            className={isDark ? "border-zinc-800 bg-transparent hover:bg-zinc-900" : "border-gray-200 bg-white"}
+          >
+            {isDark ? <Sun size={16} /> : <Moon size={16} />}
+          </Button>
         </div>
 
-        {/* Stat cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
-          {STAT_CARDS.map(({ label, icon: Icon, value, suffix, trend }) => (
-            <Card key={label} className={["rounded-xl p-6", cardBg].join(" ")}>
-              <div className="flex items-center justify-between mb-4">
-                <p className={["text-sm font-medium", textMuted].join(" ")}>{label}</p>
-                <div className={["p-2 rounded-lg", isDark ? "bg-zinc-800" : "bg-gray-100"].join(" ")}>
-                  <Icon size={16} className={textMuted} />
+        {activeTab === "settings" ? (
+          <Card className={["rounded-xl p-6 max-w-3xl", cardBg].join(" ")}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label>Account</Label>
+                <div className={["rounded-md border px-3 py-2 text-sm", isDark ? "border-zinc-800 bg-zinc-950" : "border-gray-200 bg-white"].join(" ")}>
+                  admin@sage.ai
                 </div>
               </div>
-              {loading ? (
-                <div className="h-9 w-20 rounded-md animate-pulse bg-zinc-700/30" />
-              ) : (
-                <CountUp
-                  to={value}
-                  suffix={suffix}
-                  className="text-3xl font-bold tabular-nums"
-                />
-              )}
-              <p className="text-green-400 text-xs mt-2">{trend}</p>
-            </Card>
-          ))}
-        </div>
-
-        {/* Table section */}
-        <Card className={["rounded-xl overflow-hidden", cardBg].join(" ")}>
-          <div className="p-6 pb-4 flex items-center justify-between gap-4 flex-wrap">
-            <h2 className="text-base font-semibold">Recent Candidates</h2>
-            <div className="relative w-72">
-              <Search size={14} className={["absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none", textMuted].join(" ")} />
-              <Input
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search name, email, role…"
-                className={["pl-9 h-9 text-sm", inputCls].join(" ")}
-              />
+              <div className="space-y-2">
+                <Label>Change Password</Label>
+                <Input disabled placeholder="Coming soon" />
+              </div>
             </div>
-          </div>
+          </Card>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
+              {STAT_CARDS.map(({ label, icon: Icon, value, suffix, trend }) => (
+                <Card key={label} className={["rounded-xl p-6", cardBg].join(" ")}>
+                  <div className="flex items-center justify-between mb-4">
+                    <p className={["text-sm font-medium", textMuted].join(" ")}>{label}</p>
+                    <div className={["p-2 rounded-lg", isDark ? "bg-zinc-800" : "bg-gray-100"].join(" ")}>
+                      <Icon size={16} className={textMuted} />
+                    </div>
+                  </div>
+                  {loading ? (
+                    <div className="h-9 flex items-center">
+                      <Loader size={22} color={isDark ? "#FFFFFF" : "#0A0A0A"} />
+                    </div>
+                  ) : (
+                    <CountUp to={value} suffix={suffix} className="text-3xl font-bold tabular-nums" />
+                  )}
+                  <p className="text-green-400 text-xs mt-2">{trend}</p>
+                </Card>
+              ))}
+            </div>
 
-          <Table>
-            <TableHeader>
-              <TableRow className={["border-b", borderRow].join(" ")}>
-                {["Name", "Role Applied", "Score", "Status", "Date", "Action"].map((h) => (
-                  <TableHead key={h} className={["text-xs uppercase tracking-wide font-medium", theadCls].join(" ")}>
-                    {h}
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                Array.from({ length: 6 }).map((_, i) => (
-                  <TableRow key={i}>
-                    <TableCell colSpan={6}>
-                      <div className="h-9 rounded-md animate-pulse bg-zinc-700/20" />
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : filtered.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="py-14 text-center">
-                    <p className={["text-sm", textMuted].join(" ")}>No candidates match "{query}"</p>
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filtered.map((r) => (
-                  <TableRow key={r.id} className={["border-b transition-colors", borderRow, rowHover].join(" ")}>
-                    <TableCell>
-                      <div className="font-semibold text-sm">{r.name}</div>
-                      <div className={["text-xs", textMuted].join(" ")}>{r.email}</div>
-                    </TableCell>
-                    <TableCell className="text-sm">{r.role}</TableCell>
-                    <TableCell>
-                      {r.score !== null ? (
-                        <span className={["font-semibold tabular-nums text-sm", scoreColor(r.score)].join(" ")}>
-                          {r.score.toFixed(1)}
-                          <span className={["text-xs ml-0.5", textMuted].join(" ")}>/10</span>
-                        </span>
-                      ) : (
-                        <span className={textMuted}>—</span>
-                      )}
-                    </TableCell>
-                    <TableCell><StatusBadge status={r.status} /></TableCell>
-                    <TableCell className={["text-sm", textMuted].join(" ")}>{r.date}</TableCell>
-                    <TableCell>
-                      {r.status === "Evaluated" ? (
-                        <Button asChild size="sm" className={isDark ? "bg-[#7C3AED] hover:bg-[#7C3AED]/90 text-white" : "bg-black text-white hover:bg-black/90"}>
-                          <Link to={`/hr/report/${r.id}`}>View Report</Link>
-                        </Button>
-                      ) : (
-                        <Button size="sm" variant="outline" disabled className={isDark ? "border-zinc-700 text-zinc-500" : ""}>
-                          View Report
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+            <Card
+              ref={candidatesRef}
+              className={[
+                "rounded-xl overflow-hidden scroll-mt-24",
+                activeTab === "candidates" ? (isDark ? "ring-2 ring-purple-500/40" : "ring-2 ring-blue-500/30") : "",
+                cardBg,
+              ].join(" ")}
+            >
+              <div className="p-6 pb-4 flex items-center justify-between gap-4 flex-wrap">
+                <h2 className="text-base font-semibold">Recent Candidates</h2>
+                <div className="relative w-72">
+                  <Search size={14} className={["absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none", textMuted].join(" ")} />
+                  <Input
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Search name, email, role…"
+                    className={["pl-9 h-9 text-sm", inputCls].join(" ")}
+                  />
+                </div>
+              </div>
 
-          <div className={["px-6 py-3 text-xs border-t", textMuted, borderRow].join(" ")}>
-            {filtered.length} of {rows.length} candidate{rows.length !== 1 ? "s" : ""}
-          </div>
-        </Card>
+              <Table>
+                <TableHeader>
+                  <TableRow className={["border-b", borderRow].join(" ")}>
+                    {["Name", "Role Applied", "Score", "Status", "Date", "Action"].map((h) => (
+                      <TableHead key={h} className={["text-xs uppercase tracking-wide font-medium", theadCls].join(" ")}>
+                        {h}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="py-14">
+                        <div className="flex items-center justify-center">
+                          <Loader size={28} color={isDark ? "#FFFFFF" : "#0A0A0A"} />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ) : filtered.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="py-14 text-center">
+                        <p className={["text-sm", textMuted].join(" ")}>No candidates match "{query}"</p>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filtered.map((r) => (
+                      <TableRow key={r.id} className={["border-b transition-colors", borderRow, rowHover].join(" ")}>
+                        <TableCell>
+                          <div className="font-semibold text-sm">{r.name}</div>
+                          <div className={["text-xs", textMuted].join(" ")}>{r.email}</div>
+                        </TableCell>
+                        <TableCell className="text-sm">{r.role}</TableCell>
+                        <TableCell>
+                          {r.score !== null ? (
+                            <span className={["font-semibold tabular-nums text-sm", scoreColor(r.score)].join(" ")}>
+                              {r.score.toFixed(1)}
+                              <span className={["text-xs ml-0.5", textMuted].join(" ")}>/10</span>
+                            </span>
+                          ) : (
+                            <span className={textMuted}>—</span>
+                          )}
+                        </TableCell>
+                        <TableCell><StatusBadge status={r.status} /></TableCell>
+                        <TableCell className={["text-sm", textMuted].join(" ")}>{r.date}</TableCell>
+                        <TableCell>
+                          {r.status === "Evaluated" ? (
+                            <Button asChild size="sm" className={isDark ? "bg-[#7C3AED] hover:bg-[#7C3AED]/90 text-white" : "bg-black text-white hover:bg-black/90"}>
+                              <Link to={`/hr/report/${r.id}`}>View Report</Link>
+                            </Button>
+                          ) : (
+                            <Button size="sm" variant="outline" disabled className={isDark ? "border-zinc-700 text-zinc-500" : ""}>
+                              View Report
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+
+              <div className={["px-6 py-3 text-xs border-t", textMuted, borderRow].join(" ")}>
+                {filtered.length} of {rows.length} candidate{rows.length !== 1 ? "s" : ""}
+              </div>
+            </Card>
+          </>
+        )}
       </main>
     </div>
   )

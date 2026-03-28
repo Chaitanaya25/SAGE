@@ -4,11 +4,11 @@ import {
   ArrowLeft,
   CheckCircle,
   FileText,
-  Loader2,
   Upload as UploadIcon,
   X,
 } from "lucide-react"
 
+import Loader from "@/components/Loader"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
@@ -190,7 +190,9 @@ export default function Upload() {
           <Button className="w-full" disabled={!file || !jobRole || loading} onClick={onSubmit}>
             {loading ? (
               <span className="inline-flex items-center gap-2">
-                <Loader2 className="animate-spin" />
+                <span className="inline-flex">
+                  <Loader size={18} color="#2563EB" />
+                </span>
                 Beginning...
               </span>
             ) : (
@@ -202,7 +204,9 @@ export default function Upload() {
             <Card className="p-4 border border-[#E5E7EB] bg-white">
               <div className="flex items-center justify-between text-sm">
                 <div className="inline-flex items-center gap-2 text-gray-700">
-                  <Loader2 className="animate-spin" size={16} />
+                  <span className="inline-flex">
+                    <Loader size={16} color="#2563EB" />
+                  </span>
                   <span>{loadingSteps[loadingStepIndex]}</span>
                 </div>
                 <div className="text-gray-500">

@@ -1,11 +1,12 @@
 import { useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { CheckCircle, FileText, Loader2, Upload as UploadIcon, X as XIcon } from "lucide-react"
+import { CheckCircle, FileText, Upload as UploadIcon, X as XIcon } from "lucide-react"
 import { motion } from "framer-motion"
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart } from "recharts"
 
 import AnimatedBackground from "@/components/AnimatedBackground"
 import CandidateHeader from "@/components/CandidateHeader"
+import Loader from "@/components/Loader"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -297,7 +298,9 @@ export default function Analyze() {
               >
                 {analysisState === "loading" ? (
                   <span className="inline-flex items-center gap-2">
-                    <Loader2 className="animate-spin" size={16} />
+                    <span className="inline-flex">
+                      <Loader size={16} color={isDark ? "#FFFFFF" : "#FFFFFF"} />
+                    </span>
                     Analyzing...
                   </span>
                 ) : (
