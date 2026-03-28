@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 
 import CandidateDone from "@/pages/candidate/Done"
 import CandidateAnalyze from "@/pages/candidate/Analyze"
+import CandidateDashboard from "@/pages/candidate/Dashboard"
 import CandidateHome from "@/pages/candidate/Home"
 import CandidateInterview from "@/pages/candidate/Interview"
 import CandidateLogin from "@/pages/candidate/Login"
@@ -24,6 +25,7 @@ export default function App() {
         <Route path="/schedule" element={<CandidateSchedule />} />
         <Route path="/pricing" element={<CandidatePricing />} />
         <Route path="/login" element={<CandidateLogin />} />
+        <Route path="/dashboard" element={<CandidateDashboard />} />
         <Route path="/upload" element={<CandidateUpload />} />
         <Route path="/interviews" element={<InterviewList />} />
         <Route path="/interview" element={<CandidateInterview />} />

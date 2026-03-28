@@ -8,7 +8,7 @@ import {
 
 import CountUp from "@/components/CountUp"
 import AnimatedBackground from "@/components/AnimatedBackground"
-import CandidateHeader from "@/components/CandidateHeader"
+import HomeHeader from "@/components/HomeHeader"
 import RotatingText from "@/components/RotatingText.jsx"
 import VariableProximity from "@/components/VariableProximity.jsx"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
@@ -19,7 +19,6 @@ import { useTheme } from "@/lib/theme-context"
 export default function Home() {
   const { theme } = useTheme()
   const isDark = theme === "dark"
-  const heroRef = useRef<HTMLDivElement | null>(null)
   const pipelineRef = useRef<HTMLDivElement | null>(null)
   const whyRef = useRef<HTMLDivElement | null>(null)
   const metricsHeadingRef = useRef<HTMLDivElement | null>(null)
@@ -64,33 +63,30 @@ export default function Home() {
       <AnimatedBackground variant="particles" />
 
       <div className="relative z-10">
-        <CandidateHeader />
+        <HomeHeader />
 
         <section className="relative min-h-[calc(100vh-56px)] flex items-center bg-transparent">
           <div className="w-full px-4">
             <div className="mx-auto max-w-5xl py-16">
-              <div className="text-center" ref={heroRef} style={{ position: "relative" }}>
-                <h1 className="text-5xl md:text-7xl font-bold">
-                  Autonomous AI <br />
-                  <span className="inline-flex mt-2">
-                    <RotatingText
-                      texts={["Recruitment", "Screening", "Evaluation", "Assessment"]}
-                      mainClassName={[
-                        "px-4 py-1 text-white rounded-lg",
-                        isDark ? "bg-purple-600" : "bg-blue-600",
-                      ].join(" ")}
-                      staggerFrom="last"
-                      initial={{ y: "100%" }}
-                      animate={{ y: 0 }}
-                      exit={{ y: "-120%" }}
-                      staggerDuration={0.025}
-                      splitLevelClassName="overflow-hidden pb-0.5"
-                      transition={{ type: "spring", damping: 30, stiffness: 400 }}
-                      rotationInterval={2500}
-                    />
-                  </span>
-                </h1>
-              </div>
+              <h1 className="text-5xl md:text-7xl font-bold text-center">
+                Autonomous AI
+                <br />
+                <span className="inline-flex mt-2 justify-center">
+                  <RotatingText
+                    texts={["Recruitment", "Screening", "Evaluation", "Assessment"]}
+                    mainClassName="px-2 md:px-3 bg-purple-600 text-white overflow-hidden py-0.5 md:py-1 justify-center rounded-lg"
+                    staggerFrom="last"
+                    initial={{ y: "100%" }}
+                    animate={{ y: 0 }}
+                    exit={{ y: "-120%" }}
+                    staggerDuration={0.025}
+                    splitLevelClassName="overflow-hidden pb-0.5 md:pb-1"
+                    transition={{ type: "spring", damping: 30, stiffness: 400 }}
+                    rotationInterval={2000}
+                    splitBy="words"
+                  />
+                </span>
+              </h1>
               <div className="text-lg text-muted-foreground text-center max-w-2xl mx-auto mt-4">
                 End-to-end candidate screening. Resume parsing, voice interviews, and AI evaluation — fully autonomous.
               </div>
@@ -102,7 +98,7 @@ export default function Home() {
                     isDark ? "bg-[#7C3AED] hover:bg-[#7C3AED]/90" : "bg-black text-white hover:bg-black/90 border border-black"
                   }
                 >
-                  <Link to="/upload">Begin Assessment</Link>
+                  <Link to="/login">Login</Link>
                 </Button>
                 <Button
                   asChild
@@ -110,7 +106,7 @@ export default function Home() {
                   variant="outline"
                   className={outlineCtaClass}
                 >
-                  <Link to="/hr/login">Enterprise Demo</Link>
+                  <Link to="/login">Sign Up</Link>
                 </Button>
               </div>
             </div>

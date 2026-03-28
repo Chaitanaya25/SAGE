@@ -12,6 +12,7 @@ declare module "@/components/RotatingText.jsx" {
     splitLevelClassName?: string
     transition?: Record<string, unknown>
     rotationInterval?: number
+    splitBy?: string
   }
 
   const RotatingText: ComponentType<RotatingTextProps>

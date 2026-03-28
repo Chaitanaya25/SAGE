@@ -61,7 +61,7 @@ function StatusBadge({ status }: { status: Interview["status"] }) {
   )
 }
 
-export default function InterviewList() {
+function InterviewListInner({ compact = false }: { compact?: boolean }) {
   const navigate = useNavigate()
   const { theme } = useTheme()
   const isDark = theme === "dark"
@@ -247,21 +247,13 @@ export default function InterviewList() {
 
   const searchValue = (table.getColumn("job_role")?.getFilterValue() as string) ?? ""
 
-  // Theme classes
-  const pageBg = isDark ? "bg-zinc-950" : "bg-[#FAFAFA]"
   const cardBg = isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-gray-200"
   const theadColor = isDark ? "text-zinc-400" : "text-gray-500"
   const rowHover = isDark ? "hover:bg-zinc-800/50" : "hover:bg-gray-50"
   const borderColor = isDark ? "border-zinc-800" : "border-gray-100"
-  const textColor = isDark ? "text-zinc-50" : "text-[#0A0A0A]"
 
   return (
-    <div className={["min-h-screen relative", pageBg, textColor].join(" ")}>
-      <AnimatedBackground variant="particles" />
-      <div className="relative z-10">
-        <CandidateHeader />
-
-        <main className="max-w-5xl mx-auto pt-24 px-4 pb-16">
+    <main className={["max-w-5xl mx-auto px-4 pb-16", compact ? "pt-0" : "pt-24"].join(" ")}>
           {/* Page header */}
           <div className="flex items-start justify-between mb-8">
             <div>
@@ -360,6 +352,24 @@ export default function InterviewList() {
             {table.getRowModel().rows.length} of {interviews.length} interview{interviews.length !== 1 ? "s" : ""}
           </p>
         </main>
+  )
+}
+
+export function InterviewListContent({ compact = false }: { compact?: boolean }) {
+  return <InterviewListInner compact={compact} />
+}
+
+export default function InterviewList() {
+  const { theme } = useTheme()
+  const isDark = theme === "dark"
+  const pageBg = isDark ? "bg-zinc-950 text-zinc-50" : "bg-[#FAFAFA] text-[#0A0A0A]"
+
+  return (
+    <div className={["min-h-screen relative", pageBg].join(" ")}>
+      <AnimatedBackground variant="particles" />
+      <div className="relative z-10">
+        <CandidateHeader />
+        <InterviewListContent />
       </div>
     </div>
   )
