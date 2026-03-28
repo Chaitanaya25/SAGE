@@ -85,7 +85,7 @@ export default function CandidateHeader() {
                       </div>
                     </button>
 
-                    <button type="button" onClick={() => go("/upload")} className={["flex items-start gap-3 p-3 rounded-lg text-left", hoverItem].join(" ")}>
+                    <button type="button" onClick={() => go("/interviews")} className={["flex items-start gap-3 p-3 rounded-lg text-left", hoverItem].join(" ")}>
                       <div className={["h-10 w-10 rounded-lg p-2 flex items-center justify-center", iconShell].join(" ")}>
                         <Mic className={iconColor} size={18} />
                       </div>
