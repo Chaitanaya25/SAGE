@@ -13,16 +13,20 @@ import {
 
 import CountUp from "@/components/CountUp"
 import AnimatedBackground from "@/components/AnimatedBackground"
+import ScheduledInterviews from "@/components/ScheduledInterviews"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Calendar20 } from "@/components/ui/calendar-with-time-pressets"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { PricingSection } from "@/components/ui/pricing"
 import { useTheme } from "@/lib/theme-context"
 
 export default function Home() {
   const { theme, toggleTheme } = useTheme()
   const isDark = theme === "dark"
   const [activeDropdown, setActiveDropdown] = useState<string | null>(null)
+  const [showSchedule, setShowSchedule] = useState(false)
+  const [showCalendar, setShowCalendar] = useState(false)
   const [booking, setBooking] = useState<{ date: Date | undefined; time: string | null }>({
     date: undefined,
     time: null,
@@ -79,15 +83,20 @@ export default function Home() {
               <div
                 className="relative"
                 onMouseEnter={() => setActiveDropdown("product")}
-                onMouseLeave={() => setActiveDropdown(null)}
+                onMouseLeave={() => {
+                  setActiveDropdown(null)
+                  setShowSchedule(false)
+                  setShowCalendar(false)
+                }}
               >
                 <button type="button" className={navButtonBase}>
                   Product
                 </button>
-                {activeDropdown === "product" || activeDropdown === "product-schedule" ? (
+                {activeDropdown === "product" ? (
                   <div
                     className={[
-                      "sage-dropdown absolute top-full left-1/2 -translate-x-1/2 mt-2 backdrop-blur-xl border rounded-xl p-4 shadow-2xl min-w-[480px]",
+                      "sage-dropdown absolute top-full left-0 mt-2 backdrop-blur-xl border rounded-xl p-4 shadow-2xl relative before:content-[''] before:absolute before:-top-2 before:left-0 before:right-0 before:h-2",
+                      showSchedule ? "min-w-[640px]" : "min-w-[480px]",
                       dropdownShell,
                     ].join(" ")}
                   >
@@ -146,7 +155,10 @@ export default function Home() {
 
                       <button
                         type="button"
-                        onMouseEnter={() => setActiveDropdown("product-schedule")}
+                        onClick={() => {
+                          setShowSchedule((v) => !v)
+                          setShowCalendar(false)
+                        }}
                         className={[
                           "flex items-start gap-3 p-3 rounded-lg text-left",
                           isDark ? "hover:bg-zinc-800/50" : "hover:bg-gray-100",
@@ -196,12 +208,30 @@ export default function Home() {
                         </div>
                       </Link>
                     </div>
-                    {activeDropdown === "product-schedule" ? (
-                      <div className={["mt-3 pt-3 border-t", isDark ? "border-zinc-800" : "border-gray-200"].join(" ")}>
-                        <Calendar20 value={booking} onChange={setBooking} />
-                        <div className={["px-1 pt-2 text-xs", isDark ? "text-zinc-400" : "text-gray-600"].join(" ")}>
-                          {bookingText}
-                        </div>
+                    {showSchedule ? (
+                      <div
+                        className={[
+                          "mt-4 pt-4 border-t",
+                          isDark ? "border-zinc-800" : "border-gray-200",
+                        ].join(" ")}
+                      >
+                        <ScheduledInterviews />
+                        <Button
+                          className="w-full mt-3"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowCalendar((v) => !v)}
+                        >
+                          Book New Assessment Slot
+                        </Button>
+                        {showCalendar ? (
+                          <div className={["mt-3 rounded-xl border", isDark ? "border-zinc-800" : "border-gray-200"].join(" ")}>
+                            <Calendar20 value={booking} onChange={setBooking} />
+                            <div className={["px-4 pb-4 text-xs", isDark ? "text-zinc-400" : "text-gray-600"].join(" ")}>
+                              {bookingText}
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
                   </div>
@@ -385,6 +415,68 @@ export default function Home() {
 
         <section
           id="pricing"
+          className={[
+            "py-20 transition-colors duration-300 backdrop-blur-sm",
+            isDark ? "bg-zinc-950/90" : "bg-white/90",
+          ].join(" ")}
+        >
+          <div className="max-w-6xl mx-auto px-4">
+            <PricingSection
+              heading="Assessment Plans"
+              description="Choose the right plan for your hiring needs. Scale from individual assessments to enterprise-wide deployment."
+              plans={[
+                {
+                  name: "Starter",
+                  info: "For individual candidates",
+                  price: { monthly: 0, yearly: 0 },
+                  features: [
+                    { text: "1 AI assessment per month" },
+                    { text: "Basic resume analysis" },
+                    { text: "Standard voice interview (8 questions)" },
+                    { text: "Score report with recommendations" },
+                    { text: "Email support", tooltip: "Response within 48 hours" },
+                  ],
+                  btn: { text: "Get Started Free", href: "/upload" },
+                },
+                {
+                  name: "Professional",
+                  info: "For active job seekers",
+                  highlighted: true,
+                  price: { monthly: 19, yearly: 190 },
+                  features: [
+                    { text: "Unlimited AI assessments" },
+                    { text: "Advanced ATS resume scoring" },
+                    { text: "Extended interviews (12 questions)" },
+                    { text: "Detailed radar chart analytics" },
+                    { text: "Skill gap analysis with recommendations" },
+                    { text: "Priority support", tooltip: "24/7 chat support" },
+                    { text: "Interview preparation tips", tooltip: "AI-generated prep materials" },
+                  ],
+                  btn: { text: "Start Pro Trial", href: "/upload" },
+                },
+                {
+                  name: "Enterprise",
+                  info: "For organizations & HR teams",
+                  price: { monthly: 99, yearly: 990 },
+                  features: [
+                    { text: "Unlimited team assessments" },
+                    { text: "HR Dashboard with analytics" },
+                    { text: "Custom evaluation rubrics" },
+                    { text: "Bulk candidate processing" },
+                    { text: "API access for integrations" },
+                    { text: "Dedicated account manager", tooltip: "Personal onboarding and support" },
+                    { text: "SOC 2 compliance reporting" },
+                  ],
+                  btn: { text: "Contact Sales", href: "/hr/login" },
+                },
+              ]}
+              className={isDark ? "text-zinc-50" : "text-gray-900"}
+            />
+          </div>
+        </section>
+
+        <section
+          id="metrics"
           className={[
             "w-full py-16 transition-colors duration-300",
             isDark ? "bg-zinc-900" : "bg-white",
