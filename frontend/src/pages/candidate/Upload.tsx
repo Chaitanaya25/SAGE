@@ -1,9 +1,17 @@
-import { useMemo, useRef, useState } from "react"
-import { useNavigate } from "react-router-dom"
-import { CheckCircle, FileText, Loader2, Upload as UploadIcon, X } from "lucide-react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { Link, useNavigate } from "react-router-dom"
+import {
+  ArrowLeft,
+  CheckCircle,
+  FileText,
+  Loader2,
+  Upload as UploadIcon,
+  X,
+} from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Progress } from "@/components/ui/progress"
 import { JOB_ROLES } from "@/lib/constants"
 import { uploadResume } from "@/lib/api"
 
@@ -23,6 +31,20 @@ export default function Upload() {
   const [dragging, setDragging] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [loadingStepIndex, setLoadingStepIndex] = useState(0)
+
+  const loadingSteps = ["Parsing resume...", "Generating questions...", "Preparing interview..."] as const
+
+  useEffect(() => {
+    if (!loading) return
+    setLoadingStepIndex(0)
+    const t1 = window.setTimeout(() => setLoadingStepIndex(1), 2000)
+    const t2 = window.setTimeout(() => setLoadingStepIndex(2), 4000)
+    return () => {
+      window.clearTimeout(t1)
+      window.clearTimeout(t2)
+    }
+  }, [loading])
 
   const fileMeta = useMemo(() => {
     if (!file) return null
@@ -66,6 +88,13 @@ export default function Upload() {
     <div className="min-h-screen bg-[#FAFAFA]">
       <div className="absolute top-6 left-6 font-semibold text-xl text-[#0A0A0A]">SAGE</div>
       <div className="max-w-xl mx-auto pt-20 px-4">
+        <Link
+          to="/home"
+          className="inline-flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
+        >
+          <ArrowLeft size={16} />
+          Back to Home
+        </Link>
         <div className="space-y-2">
           <div className="text-3xl font-semibold text-[#0A0A0A]">Upload Your Resume</div>
           <div className="text-sm text-gray-600">
@@ -119,12 +148,12 @@ export default function Upload() {
           </div>
 
           {fileMeta ? (
-            <Card className="p-4 flex items-center justify-between">
+            <Card className="p-6 flex items-center justify-between border border-[#E5E7EB]">
               <div className="flex items-center gap-3">
                 <FileText className="text-gray-600" />
                 <div>
-                  <div className="text-sm font-medium text-[#0A0A0A]">{fileMeta.name}</div>
-                  <div className="text-xs text-gray-500">{fileMeta.size}</div>
+                  <div className="text-base font-semibold text-[#0A0A0A]">{fileMeta.name}</div>
+                  <div className="text-sm text-gray-600">{fileMeta.size}</div>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -168,6 +197,23 @@ export default function Upload() {
               "Begin Interview"
             )}
           </Button>
+
+          {loading ? (
+            <Card className="p-4 border border-[#E5E7EB] bg-white">
+              <div className="flex items-center justify-between text-sm">
+                <div className="inline-flex items-center gap-2 text-gray-700">
+                  <Loader2 className="animate-spin" size={16} />
+                  <span>{loadingSteps[loadingStepIndex]}</span>
+                </div>
+                <div className="text-gray-500">
+                  {loadingStepIndex + 1}/{loadingSteps.length}
+                </div>
+              </div>
+              <div className="mt-3">
+                <Progress value={((loadingStepIndex + 1) / loadingSteps.length) * 100} />
+              </div>
+            </Card>
+          ) : null}
         </div>
       </div>
     </div>

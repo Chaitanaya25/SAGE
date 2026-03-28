@@ -44,9 +44,8 @@
 body {
   margin: 0;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  background-color: #FAFAFA;
-  color: #0A0A0A;
   -webkit-font-smoothing: antialiased;
+  transition: background-color 300ms ease, color 300ms ease;
 }
 
 @theme inline {
@@ -136,4 +135,39 @@ body {
   html {
     @apply font-sans;
   }
+}
+
+.dark body, .dark {
+  background-color: #09090b;
+  color: #fafafa;
+}
+
+.light body, .light {
+  background-color: #fafafa;
+  color: #0a0a0a;
+}
+
+.dark {
+  --background: 240 5% 4%;
+  --foreground: 0 0% 98%;
+  --card: 240 5% 7%;
+  --card-foreground: 0 0% 98%;
+  --popover: 240 5% 7%;
+  --popover-foreground: 0 0% 98%;
+  --primary: 262 83% 58%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 240 4% 14%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 240 4% 14%;
+  --muted-foreground: 0 0% 70%;
+  --accent: 240 4% 14%;
+  --accent-foreground: 0 0% 98%;
+  --border: 240 4% 16%;
+  --input: 240 4% 16%;
+  --ring: 262 83% 58%;
+}
+
+.light {
+  --primary: 221 83% 53%;
+  --ring: 221 83% 53%;
 }
