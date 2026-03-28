@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import AnimatedBackground from "@/components/AnimatedBackground"
 import CandidateHeader from "@/components/CandidateHeader"
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { scheduleInterview } from "@/lib/api"
 import { JOB_ROLES } from "@/lib/constants"
 import { useTheme } from "@/lib/theme-context"
 
@@ -15,19 +16,91 @@ export function ScheduleContent() {
   const { theme } = useTheme()
   const isDark = theme === "dark"
 
-  const [scheduledList, setScheduledList] = useState<ScheduledInterview[]>([
-    { id: "1", company: "Google", role: "Software Engineer", date: "Mar 29, 2026", time: "10:30 AM", status: "Confirmed" },
-    { id: "2", company: "Meta", role: "ML Engineer", date: "Apr 01, 2026", time: "2:00 PM", status: "Pending" },
-    { id: "3", company: "Stripe", role: "Backend Developer", date: "Mar 25, 2026", time: "11:00 AM", status: "Completed" },
-    { id: "4", company: "Vercel", role: "Frontend Developer", date: "Apr 03, 2026", time: "9:00 AM", status: "Confirmed" },
-    { id: "5", company: "Anthropic", role: "AI Research", date: "Apr 05, 2026", time: "3:30 PM", status: "Pending" },
-  ])
+  const [scheduledList, setScheduledList] = useState<ScheduledInterview[]>([])
+  const [loading, setLoading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
   const [selectedDate, setSelectedDate] = useState<Date | undefined>()
   const [selectedTime, setSelectedTime] = useState<string>("")
   const [showBookingForm, setShowBookingForm] = useState(false)
   const [bookingRole, setBookingRole] = useState("")
   const [bookingCompany, setBookingCompany] = useState("")
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
+
+  function toScheduledAtISO(date: Date, time: string) {
+    const m = time.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i)
+    if (!m) throw new Error("Invalid time")
+    let h = Number(m[1])
+    const min = Number(m[2])
+    const meridiem = m[3].toUpperCase()
+    if (meridiem === "AM" && h === 12) h = 0
+    if (meridiem === "PM" && h !== 12) h += 12
+    const d = new Date(date)
+    d.setHours(h, min, 0, 0)
+    return d.toISOString()
+  }
+
+  async function loadScheduled(signal?: AbortSignal) {
+    const candidate = JSON.parse(localStorage.getItem("sage_candidate") || "{}") as { id?: string; candidate_id?: string }
+    const candidateId = candidate.id ?? candidate.candidate_id ?? ""
+    const token = localStorage.getItem("sage_token")
+    const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {}
+    const res = await fetch("http://localhost:8000/api/interviews", { headers, signal })
+    if (!res.ok) throw new Error("Failed")
+    const raw = (await res.json()) as unknown
+    const arr: unknown[] =
+      Array.isArray(raw) ? raw : Array.isArray((raw as { interviews?: unknown[] } | null)?.interviews) ? (raw as { interviews: unknown[] }).interviews : []
+    const mine = candidateId
+      ? arr.filter((x) => {
+          const r = x && typeof x === "object" ? (x as Record<string, unknown>) : {}
+          return String(r.candidate_id ?? "") === candidateId
+        })
+      : arr
+    const mapped: ScheduledInterview[] = mine
+      .map((x) => (x && typeof x === "object" ? (x as Record<string, unknown>) : {}))
+      .map((r) => {
+        const scheduledAt = typeof r.scheduled_at === "string" ? r.scheduled_at : ""
+        const createdAt = typeof r.created_at === "string" ? r.created_at : ""
+        const when = scheduledAt || createdAt
+        const d = when ? new Date(when) : null
+        const date = d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }) : "—"
+        const time = d && !Number.isNaN(d.getTime()) ? d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "—"
+        const statusRaw = String(r.status ?? "").toLowerCase()
+        const status: ScheduledInterview["status"] =
+          statusRaw.includes("complete") ? "Completed" : statusRaw.includes("confirm") ? "Confirmed" : "Pending"
+        return {
+          id: String(r.id ?? ""),
+          company: String(r.company ?? "—"),
+          role: String(r.job_role ?? r.role ?? "—"),
+          date,
+          time,
+          status,
+        }
+      })
+      .filter((i) => i.id && i.role !== "—")
+      .sort((a, b) => (a.date < b.date ? 1 : -1))
+    setScheduledList(mapped)
+  }
+
+  useEffect(() => {
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), 10000)
+    ;(async () => {
+      try {
+        setLoading(true)
+        await loadScheduled(controller.signal)
+      } catch {
+        setScheduledList([])
+      } finally {
+        setLoading(false)
+        window.clearTimeout(timeout)
+      }
+    })()
+    return () => {
+      window.clearTimeout(timeout)
+      controller.abort()
+    }
+  }, [])
 
   const selectedText = useMemo(() => {
     if (!selectedDate || !selectedTime) return ""
@@ -37,25 +110,34 @@ export function ScheduleContent() {
 
   const cardShell = isDark ? "bg-zinc-900/60 border-zinc-800 text-zinc-50" : "bg-white border-gray-200 text-gray-900"
 
-  function confirmBooking() {
+  async function confirmBooking() {
     if (!selectedDate || !selectedTime || !bookingRole || !bookingCompany.trim()) return
-    const dateText = selectedDate.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" })
-    const next: ScheduledInterview = {
-      id: String(Date.now()),
-      company: bookingCompany.trim(),
-      role: bookingRole,
-      date: dateText,
-      time: selectedTime,
-      status: "Confirmed",
+    setSubmitting(true)
+    setSubmitError(null)
+    try {
+      const candidate = JSON.parse(localStorage.getItem("sage_candidate") || "{}") as { id?: string; candidate_id?: string }
+      const candidateId = candidate.id ?? candidate.candidate_id ?? localStorage.getItem("sage_candidate_id") ?? ""
+      if (!candidateId) throw new Error("Missing candidate id")
+      const scheduledAt = toScheduledAtISO(selectedDate, selectedTime)
+      await scheduleInterview({
+        candidateId,
+        jobRole: bookingRole,
+        scheduledAt,
+        company: bookingCompany.trim(),
+      })
+      setBookingCompany("")
+      setBookingRole("")
+      setSelectedDate(undefined)
+      setSelectedTime("")
+      setShowBookingForm(false)
+      setSuccessMessage("Booking confirmed.")
+      window.setTimeout(() => setSuccessMessage(null), 2500)
+      await loadScheduled()
+    } catch (e) {
+      setSubmitError(e instanceof Error ? e.message : "Failed to schedule")
+    } finally {
+      setSubmitting(false)
     }
-    setScheduledList((prev) => [next, ...prev])
-    setBookingCompany("")
-    setBookingRole("")
-    setSelectedDate(undefined)
-    setSelectedTime("")
-    setShowBookingForm(false)
-    setSuccessMessage("Booking confirmed.")
-    window.setTimeout(() => setSuccessMessage(null), 2500)
   }
 
   return (
@@ -67,6 +149,7 @@ export function ScheduleContent() {
 
       <Card className={["mt-8 p-6 backdrop-blur-sm", cardShell].join(" ")}>
         <ScheduledInterviews items={scheduledList} />
+        {loading ? <div className="mt-3 text-sm text-muted-foreground">Loading interviews…</div> : null}
         <div className="mt-4 flex justify-end">
           <Button
             className={isDark ? "bg-[#7C3AED] text-white hover:bg-[#7C3AED]/90" : "bg-black text-white hover:bg-black/90 border border-black"}
@@ -127,11 +210,12 @@ export function ScheduleContent() {
 
                 <Button
                   className={isDark ? "bg-[#7C3AED] text-white hover:bg-[#7C3AED]/90" : "bg-black text-white hover:bg-black/90 border border-black"}
-                  disabled={!bookingRole || !bookingCompany.trim()}
+                  disabled={submitting || !bookingRole || !bookingCompany.trim()}
                   onClick={confirmBooking}
                 >
-                  Confirm Booking
+                  {submitting ? "Scheduling..." : "Confirm Booking"}
                 </Button>
+                {submitError ? <div className="text-sm text-red-500">{submitError}</div> : null}
               </div>
             ) : null}
 

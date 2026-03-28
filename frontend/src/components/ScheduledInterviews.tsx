@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useTheme } from "@/lib/theme-context"
+import { useEffect, useMemo, useState } from "react"
 
 export type ScheduledInterview = {
   id: string
@@ -11,52 +12,11 @@ export type ScheduledInterview = {
   time: string
 }
 
-const scheduledInterviews: ScheduledInterview[] = [
-  {
-    id: "1",
-    company: "Google",
-    role: "Software Engineer",
-    status: "Confirmed",
-    date: "Mar 29, 2026",
-    time: "10:30 AM",
-  },
-  {
-    id: "2",
-    company: "Meta",
-    role: "ML Engineer",
-    status: "Pending",
-    date: "Apr 01, 2026",
-    time: "2:00 PM",
-  },
-  {
-    id: "3",
-    company: "Stripe",
-    role: "Backend Developer",
-    status: "Completed",
-    date: "Mar 25, 2026",
-    time: "11:00 AM",
-  },
-  {
-    id: "4",
-    company: "Vercel",
-    role: "Frontend Developer",
-    status: "Confirmed",
-    date: "Apr 03, 2026",
-    time: "9:00 AM",
-  },
-  {
-    id: "5",
-    company: "Anthropic",
-    role: "AI Research",
-    status: "Pending",
-    date: "Apr 05, 2026",
-    time: "3:30 PM",
-  },
-]
-
-export default function ScheduledInterviews({ items = scheduledInterviews }: { items?: ScheduledInterview[] }) {
+export default function ScheduledInterviews({ items }: { items?: ScheduledInterview[] }) {
   const { theme } = useTheme()
   const isDark = theme === "dark"
+  const [loading, setLoading] = useState(false)
+  const [fetched, setFetched] = useState<ScheduledInterview[]>([])
 
   function badgeClass(status: string) {
     if (status === "Confirmed") {
@@ -74,7 +34,69 @@ export default function ScheduledInterviews({ items = scheduledInterviews }: { i
       : "bg-yellow-100 text-yellow-700 border-yellow-200"
   }
 
-  const upcomingCount = items.filter((i) => i.status !== "Completed").length
+  const rows = useMemo(() => (items ? items : fetched), [items, fetched])
+  const upcomingCount = rows.filter((i) => i.status !== "Completed").length
+
+  useEffect(() => {
+    if (items) return
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), 10000)
+    ;(async () => {
+      try {
+        setLoading(true)
+        const candidate = JSON.parse(localStorage.getItem("sage_candidate") || "{}") as { id?: string; candidate_id?: string }
+        const candidateId = candidate.id ?? candidate.candidate_id ?? ""
+        const token = localStorage.getItem("sage_token")
+        const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {}
+        const res = await fetch("http://localhost:8000/api/interviews", { headers, signal: controller.signal })
+        if (!res.ok) throw new Error("Failed")
+        const raw = (await res.json()) as unknown
+        const arr: unknown[] =
+          Array.isArray(raw) ? raw : Array.isArray((raw as { interviews?: unknown[] } | null)?.interviews) ? (raw as { interviews: unknown[] }).interviews : []
+
+        const mine = candidateId
+          ? arr.filter((x) => {
+              const r = x && typeof x === "object" ? (x as Record<string, unknown>) : {}
+              return String(r.candidate_id ?? "") === candidateId
+            })
+          : arr
+
+        const mapped: ScheduledInterview[] = mine
+          .map((x) => (x && typeof x === "object" ? (x as Record<string, unknown>) : {}))
+          .map((r) => {
+            const scheduledAt = typeof r.scheduled_at === "string" ? r.scheduled_at : ""
+            const createdAt = typeof r.created_at === "string" ? r.created_at : ""
+            const when = scheduledAt || createdAt
+            const d = when ? new Date(when) : null
+            const date = d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }) : "—"
+            const time = d && !Number.isNaN(d.getTime()) ? d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "—"
+            const statusRaw = String(r.status ?? "").toLowerCase()
+            const status: ScheduledInterview["status"] =
+              statusRaw.includes("complete") ? "Completed" : statusRaw.includes("confirm") ? "Confirmed" : "Pending"
+            return {
+              id: String(r.id ?? ""),
+              company: String(r.company ?? "—"),
+              role: String(r.job_role ?? r.role ?? "—"),
+              status,
+              date,
+              time,
+            }
+          })
+          .filter((i) => i.id && i.role !== "—")
+
+        setFetched(mapped)
+      } catch {
+        setFetched([])
+      } finally {
+        setLoading(false)
+        window.clearTimeout(timeout)
+      }
+    })()
+    return () => {
+      window.clearTimeout(timeout)
+      controller.abort()
+    }
+  }, [items])
 
   return (
     <div className="w-full">
@@ -92,28 +114,42 @@ export default function ScheduledInterviews({ items = scheduledInterviews }: { i
           </TableRow>
         </TableHeader>
         <TableBody>
-          {items.map((interview) => (
-            <TableRow key={interview.id} className="hover:bg-muted/40">
-              <TableCell className="font-medium">{interview.company}</TableCell>
-              <TableCell>{interview.role}</TableCell>
-              <TableCell>{interview.date}</TableCell>
-              <TableCell>{interview.time}</TableCell>
-              <TableCell>
-                <Badge
-                  variant={
-                    interview.status === "Confirmed"
-                      ? "default"
-                      : interview.status === "Completed"
-                        ? "secondary"
-                        : "outline"
-                  }
-                  className={badgeClass(interview.status)}
-                >
-                  {interview.status}
-                </Badge>
+          {loading ? (
+            <TableRow>
+              <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                Loading interviews…
               </TableCell>
             </TableRow>
-          ))}
+          ) : rows.length === 0 ? (
+            <TableRow>
+              <TableCell colSpan={5} className="py-10 text-center text-sm text-muted-foreground">
+                No interviews yet
+              </TableCell>
+            </TableRow>
+          ) : (
+            rows.map((interview) => (
+              <TableRow key={interview.id} className="hover:bg-muted/40">
+                <TableCell className="font-medium">{interview.company}</TableCell>
+                <TableCell>{interview.role}</TableCell>
+                <TableCell>{interview.date}</TableCell>
+                <TableCell>{interview.time}</TableCell>
+                <TableCell>
+                  <Badge
+                    variant={
+                      interview.status === "Confirmed"
+                        ? "default"
+                        : interview.status === "Completed"
+                          ? "secondary"
+                          : "outline"
+                    }
+                    className={badgeClass(interview.status)}
+                  >
+                    {interview.status}
+                  </Badge>
+                </TableCell>
+              </TableRow>
+            ))
+          )}
         </TableBody>
         <TableFooter>
           <TableRow>

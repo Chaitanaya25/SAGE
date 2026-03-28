@@ -38,14 +38,6 @@ interface Interview {
   overall_score: number | null
 }
 
-const mockInterviews: Interview[] = [
-  { id: "1", candidate_id: "abc", job_role: "Software Engineer", status: "completed", created_at: "2026-03-25T10:30:00Z", overall_score: 7.8 },
-  { id: "2", candidate_id: "abc", job_role: "ML Engineer", status: "in_progress", created_at: "2026-03-28T14:00:00Z", overall_score: null },
-  { id: "3", candidate_id: "abc", job_role: "Backend Developer", status: "pending", created_at: "2026-03-29T09:00:00Z", overall_score: null },
-  { id: "4", candidate_id: "abc", job_role: "Frontend Developer", status: "completed", created_at: "2026-03-20T11:00:00Z", overall_score: 8.2 },
-  { id: "5", candidate_id: "abc", job_role: "Data Analyst", status: "interrupted", created_at: "2026-03-22T16:00:00Z", overall_score: null },
-]
-
 function StatusBadge({ status }: { status: Interview["status"] }) {
   const map: Record<Interview["status"], { label: string; className: string }> = {
     pending: { label: "Scheduled", className: "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800" },
@@ -68,31 +60,33 @@ function InterviewListInner({ compact = false }: { compact?: boolean }) {
 
   const [interviews, setInterviews] = useState<Interview[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [sorting, setSorting] = useState<SortingState>([{ id: "created_at", desc: true }])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
 
   useEffect(() => {
     async function load() {
       const controller = new AbortController()
-      let didFallback = false
-      const timeoutId = window.setTimeout(() => {
-        didFallback = true
-        controller.abort()
-        setInterviews(mockInterviews)
-        setLoading(false)
-      }, 3000)
+      const timeoutId = window.setTimeout(() => controller.abort(), 10000)
       try {
-        const raw = (await getInterviews(controller.signal)) as Interview[]
-        if (didFallback) return
-        const candidate = JSON.parse(localStorage.getItem("sage_candidate") ?? "{}")
-        const candidateId = candidate?.id ?? candidate?.candidate_id ?? null
-        const filtered = candidateId ? raw.filter((i) => i.candidate_id === candidateId) : raw
-        setInterviews(filtered.length > 0 ? filtered : mockInterviews)
-      } catch {
-        if (!didFallback) setInterviews(mockInterviews)
+        setLoading(true)
+        setError(null)
+        const raw = (await getInterviews(controller.signal)) as unknown
+        const arr: Interview[] = Array.isArray(raw)
+          ? (raw as Interview[])
+          : Array.isArray((raw as { interviews?: unknown[] } | null)?.interviews)
+            ? ((raw as { interviews: Interview[] }).interviews ?? [])
+            : []
+        const candidate = JSON.parse(localStorage.getItem("sage_candidate") ?? "{}") as { id?: string; candidate_id?: string }
+        const candidateId = candidate?.id ?? candidate?.candidate_id ?? localStorage.getItem("sage_candidate_id") ?? null
+        const filtered = candidateId ? arr.filter((i) => i.candidate_id === candidateId) : arr
+        setInterviews(filtered)
+      } catch (e) {
+        setInterviews([])
+        setError(e instanceof Error ? e.message : "Failed to load interviews")
       } finally {
         window.clearTimeout(timeoutId)
-        if (!didFallback) setLoading(false)
+        setLoading(false)
       }
     }
     load()
@@ -214,16 +208,12 @@ function InterviewListInner({ compact = false }: { compact?: boolean }) {
             </Button>
           )
         }
-        // Mock rows have candidate_id "abc" — send to upload step
-        const isMock = candidate_id === "abc"
         return (
           <Button
             size="sm"
             className={isDark ? "bg-[#7C3AED] hover:bg-[#7C3AED]/90 text-white" : "bg-black text-white hover:bg-black/90"}
             onClick={() =>
-              isMock
-                ? navigate("/interview")
-                : navigate("/interview", { state: { candidateId: candidate_id, interviewId: id, jobRole: job_role } })
+              navigate("/interview", { state: { candidateId: candidate_id, interviewId: id, jobRole: job_role } })
             }
           >
             <Mic size={14} className="mr-1.5" />
@@ -263,13 +253,14 @@ function InterviewListInner({ compact = false }: { compact?: boolean }) {
               </p>
             </div>
             <Button
-              onClick={() => navigate("/interview")}
+              onClick={() => navigate("/upload")}
               className={isDark ? "bg-[#7C3AED] hover:bg-[#7C3AED]/90 text-white" : "bg-black text-white hover:bg-black/90"}
             >
               <Plus size={16} className="mr-1.5" />
               New Interview
             </Button>
           </div>
+          {error ? <div className="mb-4 text-sm text-red-500">{error}</div> : null}
 
           {/* Search */}
           <div className="relative mb-4">
@@ -320,7 +311,7 @@ function InterviewListInner({ compact = false }: { compact?: boolean }) {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => navigate("/interview")}
+                              onClick={() => navigate("/upload")}
                               className={isDark ? "border-zinc-700 text-zinc-200 hover:bg-zinc-800" : ""}
                             >
                               Upload Resume

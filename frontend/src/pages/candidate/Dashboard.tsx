@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
-import { BarChart3, Calendar, CreditCard, FileSearch, FileText, LayoutDashboard, LogOut, Mic, Moon, Settings, Sun } from "lucide-react"
+import { BarChart3, Calendar, CheckCircle, CreditCard, FileSearch, FileText, LayoutDashboard, LogOut, Mic, Moon, Settings, Sun, TrendingUp } from "lucide-react"
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart } from "recharts"
-import { flexRender, getCoreRowModel, getSortedRowModel, type ColumnDef, type SortingState, useReactTable } from "@tanstack/react-table"
 
 import { AnalyzeContent } from "@/pages/candidate/Analyze"
 import { InterviewListContent } from "@/pages/candidate/InterviewList"
@@ -10,7 +9,6 @@ import { ScheduleContent } from "@/pages/candidate/Schedule"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart"
 import { Input } from "@/components/ui/input"
 import { PricingSection } from "@/components/ui/pricing"
 import { Progress } from "@/components/ui/progress"
@@ -29,19 +27,9 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
-import { getInterviews } from "@/lib/api"
 import { useTheme } from "@/lib/theme-context"
 
 type Tab = "overview" | "resume" | "interviews" | "schedule" | "scores" | "reports" | "settings" | "pricing"
-
-type CandidateReportRow = {
-  id: string
-  role: string
-  date: string
-  score: number
-  status: "Evaluated" | "Hired" | "Rejected"
-  recommendation: "HIRE" | "NO HIRE" | "REVIEW"
-}
 
 type CandidateReportDetail = {
   id: string
@@ -58,27 +46,24 @@ type CandidateReportDetail = {
   summary: string
 }
 
-const mockReports: CandidateReportRow[] = [
-  { id: "1", role: "Software Engineer", date: "Mar 29, 2026", score: 2.3, status: "Evaluated", recommendation: "NO HIRE" },
-  { id: "2", role: "ML Engineer", date: "Mar 28, 2026", score: 7.8, status: "Hired", recommendation: "HIRE" },
-]
+type InterviewItem = {
+  id: string
+  candidate_id: string
+  job_role: string
+  status: string
+  created_at: string
+  scheduled_at: string | null
+  completed_at: string | null
+  overall_score: number | null
+}
 
 type UpcomingInterview = {
   id: string
   role: string
-  company: string
   date: string
   time: string
-  status: "Confirmed" | "Pending" | "Completed"
+  status: "Pending" | "In Progress" | "Completed"
 }
-
-const fallbackUpcoming: UpcomingInterview[] = [
-  { id: "1", role: "ML Engineer", company: "Google", date: "Mar 29, 2026", time: "10:30 AM", status: "Confirmed" },
-  { id: "2", role: "Backend Developer", company: "Meta", date: "Apr 01, 2026", time: "2:00 PM", status: "Pending" },
-  { id: "3", role: "Software Engineer", company: "Stripe", date: "Mar 25, 2026", time: "11:00 AM", status: "Completed" },
-  { id: "4", role: "Frontend Developer", company: "Vercel", date: "Apr 03, 2026", time: "9:00 AM", status: "Confirmed" },
-  { id: "5", role: "Data Analyst", company: "Anthropic", date: "Apr 05, 2026", time: "3:30 PM", status: "Pending" },
-]
 
 export default function CandidateDashboard() {
   const location = useLocation() as unknown as { state?: { tab?: string } }
@@ -86,14 +71,14 @@ export default function CandidateDashboard() {
   const { theme, toggleTheme } = useTheme()
   const isDark = theme === "dark"
   const [tab, setTab] = useState<Tab>("overview")
-  const [upcoming, setUpcoming] = useState<UpcomingInterview[]>(fallbackUpcoming)
-  const [roleSearch, setRoleSearch] = useState("")
-  const [sorting, setSorting] = useState<SortingState>([])
-  const [stats, setStats] = useState({
-    completed: 3,
-    avgScore: 7.8,
-    nextInterview: "Mar 29",
-    resumeScore: 78,
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [interviews, setInterviews] = useState<InterviewItem[]>([])
+  const [stats, setStats] = useState<{ completed: number; avgScore: number | null; total: number; resumeScore: number | null }>({
+    completed: 0,
+    avgScore: null,
+    total: 0,
+    resumeScore: null,
   })
   const [profileName, setProfileName] = useState("")
   const [preferredLanguage, setPreferredLanguage] = useState("English")
@@ -101,11 +86,11 @@ export default function CandidateDashboard() {
   const [emailAlerts, setEmailAlerts] = useState(true)
   const [interviewReminders, setInterviewReminders] = useState(true)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
-  const [reportRows, setReportRows] = useState<CandidateReportRow[]>(mockReports)
   const [reportSearch, setReportSearch] = useState("")
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null)
   const [reportDetail, setReportDetail] = useState<CandidateReportDetail | null>(null)
   const [reportLoading, setReportLoading] = useState(false)
+  const [reportError, setReportError] = useState<string | null>(null)
 
   const tabTitles: Record<Tab, string> = {
     overview: "Overview",
@@ -120,9 +105,21 @@ export default function CandidateDashboard() {
 
   const candidate = useMemo(() => {
     try {
-      return JSON.parse(localStorage.getItem("sage_candidate") ?? "{}") as { id?: string; candidate_id?: string; name?: string; email?: string }
+      return JSON.parse(localStorage.getItem("sage_candidate") ?? "{}") as {
+        id?: string
+        candidate_id?: string
+        name?: string
+        email?: string
+        resume_parsed?: Record<string, unknown>
+      }
     } catch {
-      return {} as { id?: string; candidate_id?: string; name?: string; email?: string }
+      return {} as {
+        id?: string
+        candidate_id?: string
+        name?: string
+        email?: string
+        resume_parsed?: Record<string, unknown>
+      }
     }
   }, [])
 
@@ -148,6 +145,7 @@ export default function CandidateDashboard() {
   async function loadReport(interviewId: string) {
     setSelectedReportId(interviewId)
     setReportLoading(true)
+    setReportError(null)
     try {
       const token = localStorage.getItem("sage_token")
       const res = await fetch(`http://localhost:8000/api/report/${interviewId}`, {
@@ -179,26 +177,10 @@ export default function CandidateDashboard() {
         summary: String(d.summary ?? ""),
       }
       setReportDetail(detail)
-    } catch {
-      const fallback = reportRows.find((r) => r.id === interviewId) ?? reportRows[0]
-      if (fallback) {
-        setReportDetail({
-          id: fallback.id,
-          overall_score: fallback.score,
-          recommendation: fallback.recommendation,
-          scores: {
-            technical_depth: Math.max(0, Math.min(10, fallback.score + 1)),
-            communication: Math.max(0, Math.min(10, fallback.score + 0.8)),
-            relevance: Math.max(0, Math.min(10, fallback.score + 0.6)),
-            confidence: Math.max(0, Math.min(10, fallback.score + 0.4)),
-          },
-          strengths: ["Clear communication", "Relevant examples"],
-          weaknesses: ["Needs deeper technical detail"],
-          summary: "Demo report (fallback).",
-        })
-      } else {
-        setReportDetail(null)
-      }
+    } catch (e) {
+      console.error("Failed to load report:", e)
+      setReportDetail(null)
+      setReportError(e instanceof Error ? e.message : "Report not available")
     } finally {
       setReportLoading(false)
     }
@@ -251,156 +233,162 @@ export default function CandidateDashboard() {
     window.setTimeout(() => setSaveMessage(null), 2000)
   }
 
-  const chartConfig = useMemo(() => {
-    const config: ChartConfig = {
-      score: { label: "Score", color: isDark ? "#7C3AED" : "#2563EB" },
-    }
-    return config
-  }, [isDark])
-
-  const radarData = useMemo(
-    () => [
-      { skill: "Technical", score: 8.2 },
-      { skill: "Communication", score: 7.6 },
-      { skill: "Relevance", score: 8.0 },
-      { skill: "Confidence", score: 7.4 },
-      { skill: "Problem Solving", score: 7.9 },
-    ],
-    []
-  )
-
-  const activity = [
-    "Completed ML Engineer interview — 8.2/10",
-    "Uploaded resume for ATS scoring",
-    "Scheduled Backend Developer assessment",
-    "Viewed evaluation report",
-    "Updated candidate profile",
-  ]
-
   function logout() {
     localStorage.clear()
     navigate("/login", { replace: true })
   }
 
+  const candidateName = profileName.trim() || candidate.name || "User"
+
+  function formatDay(value?: string | null) {
+    if (!value) return "—"
+    const d = new Date(value)
+    if (Number.isNaN(d.getTime())) return "—"
+    return d.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" })
+  }
+
+  function formatTime(value?: string | null) {
+    if (!value) return "—"
+    const d = new Date(value)
+    if (Number.isNaN(d.getTime())) return "—"
+    return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+  }
+
+  function formatRelative(value?: string | null) {
+    if (!value) return ""
+    const d = new Date(value)
+    if (Number.isNaN(d.getTime())) return ""
+    const diffMs = Date.now() - d.getTime()
+    const m = Math.floor(diffMs / 60000)
+    if (m < 1) return "just now"
+    if (m < 60) return `${m} minutes ago`
+    const h = Math.floor(m / 60)
+    if (h < 24) return `${h} hours ago`
+    const days = Math.floor(h / 24)
+    return `${days} days ago`
+  }
+
   useEffect(() => {
+    let cancelled = false
     const controller = new AbortController()
-    const timeoutId = window.setTimeout(() => controller.abort(), 3000)
-    ;(async () => {
+    const timeout = window.setTimeout(() => controller.abort(), 10000)
+
+    async function fetchData() {
+      setLoading(true)
+      setError(null)
       try {
-        const raw = (await getInterviews(controller.signal)) as unknown
+        const token = localStorage.getItem("sage_token")
+        const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {}
+        const res = await fetch("http://localhost:8000/api/interviews", { headers, signal: controller.signal })
+        if (!res.ok) throw new Error("Failed to fetch interviews")
+        const data = (await res.json()) as unknown
         const arr: unknown[] =
-          Array.isArray(raw) ? raw : Array.isArray((raw as { interviews?: unknown[] } | null)?.interviews) ? (raw as { interviews: unknown[] }).interviews : []
+          Array.isArray(data) ? data : Array.isArray((data as { interviews?: unknown[] } | null)?.interviews) ? (data as { interviews: unknown[] }).interviews : []
 
-        const mine = candidateId
-          ? arr.filter((item) => {
-              const r = (item ?? {}) as Record<string, unknown>
-              return String(r.candidate_id ?? r.candidateId ?? "") === candidateId
-            })
-          : arr
-
-        const mapped: UpcomingInterview[] = mine
-          .slice(0, 8)
-          .map((item, idx) => {
-            const r = (item ?? {}) as Record<string, unknown>
-            const statusRaw = String(r.status ?? "Pending").toLowerCase()
-            const status: UpcomingInterview["status"] =
-              statusRaw.includes("complete") ? "Completed" : statusRaw.includes("confirm") ? "Confirmed" : "Pending"
-
-            const createdAt = typeof r.created_at === "string" ? new Date(r.created_at) : null
-            const date =
-              typeof r.date === "string"
-                ? r.date
-                : createdAt
-                  ? createdAt.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" })
-                  : "—"
-
-            const role = String(r.role ?? r.job_role ?? r.role_applied ?? "—")
-            return {
-              id: String(r.id ?? r.interview_id ?? idx),
-              role,
-              company: String(r.company ?? "—"),
-              date,
-              time: String(r.time ?? "—"),
-              status,
-            } satisfies UpcomingInterview
-          })
-          .filter((x: UpcomingInterview) => x.role !== "—")
-
-        if (mapped.length) {
-          setUpcoming(mapped.slice(0, 5))
-          const completed = mine.filter((item) => {
-            const r = (item ?? {}) as Record<string, unknown>
-            return String(r.status ?? "").toLowerCase() === "completed"
-          })
-          const completedCount = completed.length
-          const avgScore =
-            completedCount > 0
-              ? completed.reduce<number>((sum, item) => {
-                  const r = (item ?? {}) as Record<string, unknown>
-                  const v = Number(r.overall_score ?? r.overallScore ?? 0)
-                  return sum + (Number.isFinite(v) ? v : 0)
-                }, 0) / completedCount
-              : 0
-
-          const next = mapped.find((m) => m.status !== "Completed")?.date ?? "—"
-          const nextInterview = next === "—" ? "—" : next.split(",")[0]
-
-          setStats((prev) => ({
-            ...prev,
-            completed: completedCount,
-            avgScore: Number.isFinite(avgScore) ? Math.round(avgScore * 10) / 10 : prev.avgScore,
-            nextInterview,
+        const mine: InterviewItem[] = arr
+          .map((item) => (item && typeof item === "object" ? (item as Record<string, unknown>) : {}))
+          .map((r) => ({
+            id: String(r.id ?? ""),
+            candidate_id: String(r.candidate_id ?? ""),
+            job_role: String(r.job_role ?? r.role ?? ""),
+            status: String(r.status ?? ""),
+            created_at: String(r.created_at ?? ""),
+            scheduled_at: (r.scheduled_at ? String(r.scheduled_at) : null) as string | null,
+            completed_at: (r.completed_at ? String(r.completed_at) : null) as string | null,
+            overall_score: (typeof r.overall_score === "number" ? r.overall_score : null) as number | null,
           }))
-        }
+          .filter((iv) => iv.id && iv.candidate_id && iv.job_role)
+          .filter((iv) => (candidateId ? iv.candidate_id === candidateId : true))
 
-        const reportItems = mine
-          .filter((item) => {
-            const r = (item ?? {}) as Record<string, unknown>
-            const statusRaw = String(r.status ?? "").toLowerCase()
-            return statusRaw.includes("complete") || statusRaw.includes("evaluat")
-          })
-          .slice(0, 10)
-          .map((item, idx) => {
-            const r = (item ?? {}) as Record<string, unknown>
-            const createdAt = typeof r.created_at === "string" ? new Date(r.created_at) : null
-            const date =
-              typeof r.date === "string"
-                ? r.date
-                : createdAt
-                  ? createdAt.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" })
-                  : "—"
-            const score = Number(r.overall_score ?? r.overallScore ?? 0)
-            const recommendation: CandidateReportRow["recommendation"] = score >= 7.5 ? "HIRE" : score >= 5 ? "REVIEW" : "NO HIRE"
-            const baseStatus: CandidateReportRow["status"] = hiredIds.includes(candidateId) ? "Hired" : recommendation === "NO HIRE" ? "Rejected" : "Evaluated"
-            return {
-              id: String(r.id ?? r.interview_id ?? idx),
-              role: String(r.role ?? r.job_role ?? r.role_applied ?? "—"),
-              date,
-              score: Number.isFinite(score) ? Math.round(score * 10) / 10 : 0,
-              status: baseStatus,
-              recommendation,
-            } satisfies CandidateReportRow
-          })
-          .filter((r) => r.role !== "—")
+        if (cancelled) return
+        setInterviews(mine)
 
-        if (reportItems.length) setReportRows(reportItems)
-      } catch (err) {
-        console.log("[SAGE] Upcoming interviews fetch failed:", err)
+        const completed = mine.filter((iv) => iv.status === "completed")
+        const avgScore =
+          completed.length > 0
+            ? completed.reduce((sum, iv) => sum + (typeof iv.overall_score === "number" ? iv.overall_score : 0), 0) / completed.length
+            : null
+
+        const resumeParsed = (candidate.resume_parsed ?? {}) as Record<string, unknown>
+        const resumeScoreRaw = Number(resumeParsed.ats_score ?? resumeParsed.resume_score ?? resumeParsed.score ?? NaN)
+        const resumeScore = Number.isFinite(resumeScoreRaw) ? Math.round(resumeScoreRaw) : null
+
+        setStats({
+          total: mine.length,
+          completed: completed.length,
+          avgScore: avgScore !== null ? Math.round(avgScore * 10) / 10 : null,
+          resumeScore,
+        })
+      } catch (e) {
+        if (cancelled) return
+        console.error("Failed to fetch data:", e)
+        setInterviews([])
+        setStats({ total: 0, completed: 0, avgScore: null, resumeScore: null })
+        setError(e instanceof Error ? e.message : "Failed to fetch data")
       } finally {
-        window.clearTimeout(timeoutId)
+        if (!cancelled) setLoading(false)
+        window.clearTimeout(timeout)
       }
-    })()
+    }
+
+    void fetchData()
     return () => {
-      window.clearTimeout(timeoutId)
+      cancelled = true
+      window.clearTimeout(timeout)
       controller.abort()
     }
-  }, [candidateId, hiredIds])
+  }, [candidateId, candidate.resume_parsed])
 
-  const filteredUpcoming = useMemo(() => {
-    const q = roleSearch.trim().toLowerCase()
-    if (!q) return upcoming
-    return upcoming.filter((i) => i.role.toLowerCase().includes(q))
-  }, [upcoming, roleSearch])
+  const upcomingInterviews = useMemo(() => {
+    return interviews
+      .filter((iv) => iv.status === "pending" || iv.status === "in_progress")
+      .slice()
+      .sort((a, b) => ((a.scheduled_at ?? a.created_at) < (b.scheduled_at ?? b.created_at) ? 1 : -1))
+      .slice(0, 5)
+      .map((iv) => {
+        const when = iv.scheduled_at ?? iv.created_at
+        const status: UpcomingInterview["status"] = iv.status === "in_progress" ? "In Progress" : "Pending"
+        return {
+          id: iv.id,
+          role: iv.job_role,
+          date: formatDay(when),
+          time: formatTime(when),
+          status,
+        }
+      })
+  }, [interviews])
+
+  const completedInterviews = useMemo(() => interviews.filter((iv) => iv.status === "completed"), [interviews])
+
+  const weeklyCounts = useMemo(() => {
+    const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+    const totalThisWeek = interviews.filter((iv) => {
+      const d = new Date(iv.created_at).getTime()
+      return Number.isFinite(d) && d >= weekAgo
+    }).length
+    const completedThisWeek = interviews.filter((iv) => {
+      const d = new Date(iv.created_at).getTime()
+      return Number.isFinite(d) && d >= weekAgo && iv.status === "completed"
+    }).length
+    return { totalThisWeek, completedThisWeek }
+  }, [interviews])
+
+  const reportRows = useMemo(() => {
+    return completedInterviews
+      .slice()
+      .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+      .map((iv) => {
+        const score = typeof iv.overall_score === "number" ? Math.round(iv.overall_score * 10) / 10 : 0
+        const status = hiredIds.includes(candidateId) ? "Hired" : "Evaluated"
+        return {
+          id: iv.id,
+          role: iv.job_role,
+          date: formatDay(iv.created_at),
+          score,
+          status,
+        }
+      })
+  }, [candidateId, completedInterviews, hiredIds])
 
   const filteredReports = useMemo(() => {
     const q = reportSearch.trim().toLowerCase()
@@ -408,70 +396,27 @@ export default function CandidateDashboard() {
     return reportRows.filter((r) => r.role.toLowerCase().includes(q))
   }, [reportRows, reportSearch])
 
-  const interviewColumns = useMemo<ColumnDef<UpcomingInterview>[]>(() => {
-    const confirmedCls = isDark ? "bg-green-500/15 text-green-300 border-green-500/25" : "bg-green-100 text-green-700"
-    const completedCls = isDark ? "bg-blue-500/15 text-blue-300 border-blue-500/25" : "bg-blue-100 text-blue-700"
-    const pendingCls = isDark ? "bg-yellow-500/15 text-yellow-300 border-yellow-500/25" : "bg-yellow-100 text-yellow-700"
-
-    return [
-      {
-        accessorKey: "role",
-        header: "Role",
-        cell: ({ row }) => <span className="font-medium">{row.getValue("role") as string}</span>,
-      },
-      { accessorKey: "company", header: "Company" },
-      { accessorKey: "date", header: "Date" },
-      { accessorKey: "time", header: "Time" },
-      {
-        accessorKey: "status",
-        header: "Status",
-        cell: ({ row }) => {
-          const s = row.getValue("status") as string
-          const cls = s === "Confirmed" ? confirmedCls : s === "Completed" ? completedCls : pendingCls
-          return (
-            <Badge
-              variant={s === "Confirmed" ? "default" : s === "Completed" ? "secondary" : "outline"}
-              className={cls}
-            >
-              {s}
-            </Badge>
-          )
-        },
-      },
-      {
-        id: "action",
-        header: "Action",
-        cell: ({ row }) => {
-          const s = row.original.status
-          return (
-            <Button
-              size="sm"
-              variant={s === "Completed" ? "outline" : "default"}
-              className={
-                s === "Completed"
-                  ? isDark
-                    ? "bg-white text-black hover:bg-white/90 border-white"
-                    : "bg-black text-white hover:bg-black/90 border-black"
-                  : undefined
-              }
-              onClick={() => (s === "Completed" ? setTab("scores") : setTab("interviews"))}
-            >
-              {s === "Completed" ? "View Report" : "Start"}
-            </Button>
-          )
-        },
-      },
-    ]
-  }, [isDark])
-
-  const upcomingTable = useReactTable({
-    data: filteredUpcoming,
-    columns: interviewColumns,
-    state: { sorting },
-    onSortingChange: setSorting,
-    getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-  })
+  const recentActivity = useMemo(() => {
+    return interviews
+      .slice()
+      .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+      .slice(0, 5)
+      .map((iv) => {
+        const base = iv.status === "completed" ? "Completed" : iv.status === "in_progress" ? "Started" : "Scheduled"
+        const score = typeof iv.overall_score === "number" ? ` — ${iv.overall_score.toFixed(1)}/10` : ""
+        return {
+          id: iv.id,
+          label: `${base} ${iv.job_role} interview${iv.status === "completed" ? score : ""}`,
+          time: formatRelative(iv.created_at),
+          icon:
+            iv.status === "completed"
+              ? "check"
+              : iv.status === "in_progress"
+                ? "mic"
+                : "calendar",
+        } as const
+      })
+  }, [interviews])
 
   return (
     <SidebarProvider>
@@ -561,100 +506,204 @@ export default function CandidateDashboard() {
 
         <main className="p-6">
           {tab === "overview" ? (
-            <div className="space-y-6">
-              {isHired ? (
-                <div className="flex justify-end">
-                  <Badge className={isDark ? "bg-green-500/15 text-green-300 border border-green-500/25" : "bg-green-100 text-green-700 border border-green-200"}>
-                    Hired!
-                  </Badge>
+            <div>
+              <div className="rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 p-6 text-white mb-6">
+                <h2 className="text-2xl font-bold">Welcome back, {candidateName}!</h2>
+                <p className="text-purple-100 mt-1">Here's your assessment overview</p>
+                <div className="flex flex-wrap gap-3 mt-4 items-center">
+                  <Button size="sm" variant="secondary" onClick={() => setTab("interviews")}>
+                    Start New Interview
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className={[
+                      "border-white/30",
+                      isDark ? "bg-black text-white hover:bg-black/90 border-black/40" : "bg-white text-black hover:bg-white/90",
+                    ].join(" ")}
+                    onClick={() => setTab("resume")}
+                  >
+                    Analyze Resume
+                  </Button>
+                  {isHired ? (
+                    <Badge className="bg-white/15 text-white border border-white/20">Hired!</Badge>
+                  ) : null}
                 </div>
-              ) : null}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <Card className="p-4">
-                  <div className="text-sm text-muted-foreground">Interviews Completed</div>
-                  <div className="text-2xl font-semibold mt-1">{stats.completed}</div>
-                </Card>
-                <Card className="p-4">
-                  <div className="text-sm text-muted-foreground">Average Score</div>
-                  <div className="text-2xl font-semibold mt-1">{stats.avgScore}/10</div>
-                </Card>
-                <Card className="p-4">
-                  <div className="text-sm text-muted-foreground">Next Interview</div>
-                  <div className="text-2xl font-semibold mt-1">{stats.nextInterview}</div>
-                </Card>
-                <Card className="p-4">
-                  <div className="text-sm text-muted-foreground">Resume Score</div>
-                  <div className="text-2xl font-semibold mt-1">{stats.resumeScore}%</div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div className="rounded-xl border p-5 relative overflow-hidden">
+                  <Mic className={["absolute -right-2 -top-2 w-16 h-16 opacity-5", isDark ? "text-white" : "text-black"].join(" ")} />
+                  <div className={["text-base font-semibold", isDark ? "text-white" : "text-black"].join(" ")}>Interviews</div>
+                  <div className="text-2xl font-semibold mt-2">{loading ? "—" : String(stats.total)}</div>
+                  <div className="text-xs text-green-400 mt-2">+{weeklyCounts.totalThisWeek} this week</div>
+                </div>
+
+                <div className="rounded-xl border p-5 relative overflow-hidden">
+                  <CheckCircle className={["absolute -right-2 -top-2 w-16 h-16 opacity-5", isDark ? "text-white" : "text-black"].join(" ")} />
+                  <div className={["text-base font-semibold", isDark ? "text-white" : "text-black"].join(" ")}>Completed</div>
+                  <div className="text-2xl font-semibold mt-2">{loading ? "—" : String(stats.completed)}</div>
+                  <div className="text-xs text-green-400 mt-2">+{weeklyCounts.completedThisWeek} this week</div>
+                </div>
+
+                <div className="rounded-xl border p-5 relative overflow-hidden">
+                  <BarChart3 className={["absolute -right-2 -top-2 w-16 h-16 opacity-5", isDark ? "text-white" : "text-black"].join(" ")} />
+                  <div className={["text-base font-semibold", isDark ? "text-white" : "text-black"].join(" ")}>Avg Score</div>
+                  <div
+                    className={[
+                      "text-2xl font-semibold mt-2",
+                      stats.avgScore === null
+                        ? "text-muted-foreground"
+                        : stats.avgScore >= 7.5
+                          ? "text-green-500"
+                          : stats.avgScore >= 5
+                            ? "text-amber-500"
+                            : "text-red-500",
+                    ].join(" ")}
+                  >
+                    {loading ? "—" : stats.avgScore === null ? "—" : `${stats.avgScore.toFixed(1)}/10`}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-2">
+                    {stats.completed > 0 ? `Based on ${stats.completed} completed` : "No completed interviews yet"}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border p-5 relative overflow-hidden">
+                  <TrendingUp className={["absolute -right-2 -top-2 w-16 h-16 opacity-5", isDark ? "text-white" : "text-black"].join(" ")} />
+                  <div className={["text-base font-semibold", isDark ? "text-white" : "text-black"].join(" ")}>Resume Score</div>
+                  <div className="text-2xl font-semibold mt-2">
+                    {loading ? "—" : stats.resumeScore === null ? "—" : `${stats.resumeScore}%`}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-2">
+                    {stats.resumeScore === null ? "Upload resume to get a score" : "From latest resume analysis"}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mb-6">
+                <Card>
+                  <CardHeader className="flex flex-row items-center justify-between">
+                    <CardTitle className="text-lg">Upcoming Interviews</CardTitle>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className={isDark ? "border-zinc-700 text-white hover:bg-white/10" : "border-gray-300 text-gray-900 hover:bg-gray-50"}
+                      onClick={() => setTab("interviews")}
+                    >
+                      View All
+                    </Button>
+                  </CardHeader>
+                  <CardContent>
+                    {loading ? (
+                      <div className="text-sm text-muted-foreground">Loading interviews…</div>
+                    ) : error ? (
+                      <div className="flex items-center justify-between gap-4 flex-wrap">
+                        <div className="text-sm text-muted-foreground">Couldn't load interviews</div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className={isDark ? "border-zinc-700 text-white hover:bg-white/10" : "border-gray-300 text-gray-900 hover:bg-gray-50"}
+                          onClick={() => window.location.reload()}
+                        >
+                          Retry
+                        </Button>
+                      </div>
+                    ) : upcomingInterviews.length === 0 ? (
+                      <div className="flex items-center justify-between gap-4 flex-wrap">
+                        <div className="text-sm text-muted-foreground">No upcoming interviews</div>
+                        <Button
+                          size="sm"
+                          className={isDark ? "bg-white text-black hover:bg-white/90 border-white" : "bg-black text-white hover:bg-black/90 border-black"}
+                          onClick={() => setTab("schedule")}
+                        >
+                          Schedule One
+                        </Button>
+                      </div>
+                    ) : (
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Role</TableHead>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Time</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Action</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {upcomingInterviews.map((iv) => {
+                            const badgeCls =
+                              iv.status === "In Progress"
+                                ? isDark
+                                  ? "bg-blue-500/15 text-blue-300 border-blue-500/25"
+                                  : "bg-blue-100 text-blue-700 border-blue-200"
+                                : isDark
+                                  ? "bg-yellow-500/15 text-yellow-300 border-yellow-500/25"
+                                  : "bg-yellow-100 text-yellow-700 border-yellow-200"
+                            return (
+                              <TableRow key={iv.id}>
+                                <TableCell className="font-medium">{iv.role}</TableCell>
+                                <TableCell className="whitespace-nowrap tabular-nums">{iv.date}</TableCell>
+                                <TableCell className="whitespace-nowrap tabular-nums">{iv.time}</TableCell>
+                                <TableCell>
+                                  <Badge variant="outline" className={badgeCls}>
+                                    {iv.status}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  <Button
+                                    size="sm"
+                                    className={isDark ? "bg-white text-black hover:bg-white/90 border-white" : "bg-black text-white hover:bg-black/90 border-black"}
+                                    onClick={() => setTab("interviews")}
+                                  >
+                                    Start
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            )
+                          })}
+                        </TableBody>
+                      </Table>
+                    )}
+                  </CardContent>
                 </Card>
               </div>
 
-              <Card className="p-6">
-                <div className="font-semibold">Recent Activity</div>
-                <div className="mt-4 space-y-2 text-sm text-muted-foreground">
-                  {activity.map((a) => (
-                    <div key={a}>{a}</div>
-                  ))}
-                </div>
-              </Card>
-
-              <div className="flex flex-col sm:flex-row gap-3">
-                <Button
-                  className={isDark ? "bg-[#7C3AED] text-white hover:bg-[#7C3AED]/90" : "bg-black text-white hover:bg-black/90 border border-black"}
-                  onClick={() => setTab("interviews")}
-                >
-                  New Interview
-                </Button>
-                <Button variant="outline" onClick={() => setTab("resume")}>
-                  Upload Resume
-                </Button>
-                <Button variant="outline" onClick={() => setTab("scores")}>
-                  View Reports
-                </Button>
-              </div>
-
-              <Card className="mt-6">
+              <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">Upcoming Interviews</CardTitle>
+                  <CardTitle className="text-lg">Recent Activity</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="mb-3">
-                    <Input
-                      placeholder="Search by role..."
-                      value={roleSearch}
-                      onChange={(e) => setRoleSearch(e.target.value)}
-                    />
-                  </div>
-                  <Table>
-                    <TableHeader>
-                      {upcomingTable.getHeaderGroups().map((hg) => (
-                        <TableRow key={hg.id}>
-                          {hg.headers.map((header) => (
-                            <TableHead
-                              key={header.id}
-                              className={header.column.getCanSort() ? "cursor-pointer select-none" : undefined}
-                              onClick={header.column.getToggleSortingHandler()}
-                            >
-                              {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
-                            </TableHead>
-                          ))}
-                        </TableRow>
+                  {loading ? (
+                    <div className="text-sm text-muted-foreground">Loading activity…</div>
+                  ) : recentActivity.length === 0 ? (
+                    <div className="flex items-center justify-between gap-4 flex-wrap">
+                      <div className="text-sm text-muted-foreground">No interviews yet</div>
+                      <Button size="sm" onClick={() => setTab("interviews")}>
+                        Start your first assessment
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {recentActivity.map((a) => (
+                        <div key={a.id} className="flex items-center justify-between gap-4">
+                          <div className="flex items-center gap-3">
+                            <div className={["h-9 w-9 rounded-lg flex items-center justify-center", isDark ? "bg-zinc-800" : "bg-gray-100"].join(" ")}>
+                              {a.icon === "check" ? (
+                                <CheckCircle className={["w-4 h-4", isDark ? "text-white" : "text-black"].join(" ")} />
+                              ) : a.icon === "calendar" ? (
+                                <Calendar className={["w-4 h-4", isDark ? "text-white" : "text-black"].join(" ")} />
+                              ) : (
+                                <Mic className={["w-4 h-4", isDark ? "text-white" : "text-black"].join(" ")} />
+                              )}
+                            </div>
+                            <div className="text-sm">{a.label}</div>
+                          </div>
+                          <div className="text-xs text-muted-foreground">{a.time}</div>
+                        </div>
                       ))}
-                    </TableHeader>
-                    <TableBody>
-                      {upcomingTable.getRowModel().rows.map((row) => (
-                        <TableRow key={row.id}>
-                          {row.getVisibleCells().map((cell) => (
-                            <TableCell key={cell.id}>
-                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                            </TableCell>
-                          ))}
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  <div className="mt-3 text-xs text-muted-foreground">
-                    {filteredUpcoming.length} of {upcoming.length} interviews
-                  </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -665,45 +714,64 @@ export default function CandidateDashboard() {
           {tab === "schedule" ? <ScheduleContent /> : null}
 
           {tab === "scores" ? (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="p-6">
-                <div className="font-semibold">Competency Radar</div>
-                <div className="mt-4 h-[320px]">
-                  <ChartContainer config={chartConfig} className="h-full w-full">
-                    <RadarChart data={radarData}>
-                      <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
+            reportDetail ? (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <Card className="p-6">
+                  <div className="font-semibold">Competency Radar</div>
+                  <div className="mt-4 h-[320px]">
+                    <RadarChart
+                      width={420}
+                      height={320}
+                      data={[
+                        { skill: "Technical", score: reportDetail.scores.technical_depth },
+                        { skill: "Communication", score: reportDetail.scores.communication },
+                        { skill: "Relevance", score: reportDetail.scores.relevance },
+                        { skill: "Confidence", score: reportDetail.scores.confidence },
+                      ]}
+                    >
                       <PolarGrid />
                       <PolarAngleAxis dataKey="skill" />
                       <Radar
                         name="score"
                         dataKey="score"
-                        stroke="var(--color-score)"
-                        fill="var(--color-score)"
-                        fillOpacity={0.3}
-                        dot={{ r: 4 }}
+                        stroke={isDark ? "#7C3AED" : "#2563EB"}
+                        fill={isDark ? "#7C3AED" : "#2563EB"}
+                        fillOpacity={0.25}
                       />
                     </RadarChart>
-                  </ChartContainer>
-                </div>
-              </Card>
+                  </div>
+                </Card>
+                <Card className="p-6">
+                  <div className="font-semibold">Score Breakdown</div>
+                  <div className="mt-4 space-y-4">
+                    {([
+                      ["Technical", reportDetail.scores.technical_depth],
+                      ["Communication", reportDetail.scores.communication],
+                      ["Relevance", reportDetail.scores.relevance],
+                      ["Confidence", reportDetail.scores.confidence],
+                    ] as [string, number][]).map(([label, val]) => (
+                      <div key={label} className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">{label}</span>
+                          <span className="text-sm font-semibold tabular-nums">{val.toFixed(1)}/10</span>
+                        </div>
+                        <Progress value={Math.max(0, Math.min(100, val * 10))} />
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              </div>
+            ) : (
               <Card className="p-6">
-                <div className="font-semibold">Completed Interviews</div>
-                <div className="mt-4 space-y-3 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">ML Engineer</span>
-                    <span className="font-semibold tabular-nums">8.2/10</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Frontend Developer</span>
-                    <span className="font-semibold tabular-nums">7.6/10</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Backend Developer</span>
-                    <span className="font-semibold tabular-nums">7.7/10</span>
-                  </div>
+                <div className="font-semibold">Score Dashboard</div>
+                <div className="mt-2 text-sm text-muted-foreground">
+                  Open a completed interview report to view detailed score analytics.
+                </div>
+                <div className="mt-4">
+                  <Button onClick={() => setTab("reports")}>Go to My Reports</Button>
                 </div>
               </Card>
-            </div>
+            )
           ) : null}
 
           {tab === "reports" ? (
@@ -717,56 +785,61 @@ export default function CandidateDashboard() {
                 </div>
 
                 <div className="mt-4">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Role</TableHead>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Overall Score</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Action</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredReports.map((r) => {
-                        const statusCls =
-                          r.status === "Hired"
-                            ? isDark
-                              ? "bg-green-500/15 text-green-300 border-green-500/25"
-                              : "bg-green-100 text-green-700 border-green-200"
-                            : r.status === "Rejected"
+                  {reportRows.length === 0 ? (
+                    <div className="flex items-center justify-between gap-4 flex-wrap">
+                      <div className="text-sm text-muted-foreground">No interviews yet</div>
+                      <Button size="sm" onClick={() => setTab("interviews")}>
+                        Start your first assessment
+                      </Button>
+                    </div>
+                  ) : (
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Role</TableHead>
+                          <TableHead>Date</TableHead>
+                          <TableHead>Overall Score</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Action</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredReports.map((r) => {
+                          const statusCls =
+                            r.status === "Hired"
                               ? isDark
-                                ? "bg-red-500/15 text-red-300 border-red-500/25"
-                                : "bg-red-100 text-red-700 border-red-200"
+                                ? "bg-green-500/15 text-green-300 border-green-500/25"
+                                : "bg-green-100 text-green-700 border-green-200"
                               : isDark
                                 ? "bg-blue-500/15 text-blue-300 border-blue-500/25"
                                 : "bg-blue-100 text-blue-700 border-blue-200"
 
-                        return (
-                          <TableRow key={r.id}>
-                            <TableCell className="font-medium">{r.role}</TableCell>
-                            <TableCell>{r.date}</TableCell>
-                            <TableCell className="tabular-nums">{r.score.toFixed(1)}/10</TableCell>
-                            <TableCell>
-                              <Badge variant="outline" className={statusCls}>
-                                {r.status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className={isDark ? "bg-white text-black hover:bg-white/90 border-white" : "bg-black text-white hover:bg-black/90 border-black"}
-                                onClick={() => void loadReport(r.id)}
-                              >
-                                View Report
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        )
-                      })}
-                    </TableBody>
-                  </Table>
+                          return (
+                            <TableRow key={r.id}>
+                              <TableCell className="font-medium">{r.role}</TableCell>
+                              <TableCell>{r.date}</TableCell>
+                              <TableCell className="tabular-nums">{r.score.toFixed(1)}/10</TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className={statusCls}>
+                                  {r.status}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className={isDark ? "bg-white text-black hover:bg-white/90 border-white" : "bg-black text-white hover:bg-black/90 border-black"}
+                                  onClick={() => void loadReport(r.id)}
+                                >
+                                  View Report
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                  )}
                   <div className="mt-3 text-xs text-muted-foreground">
                     {filteredReports.length} of {reportRows.length} reports
                   </div>
@@ -776,6 +849,10 @@ export default function CandidateDashboard() {
               {reportLoading ? (
                 <Card className="p-6">
                   <div className="text-sm text-muted-foreground">Loading report…</div>
+                </Card>
+              ) : reportError ? (
+                <Card className="p-6">
+                  <div className="text-sm text-red-500">{reportError}</div>
                 </Card>
               ) : reportDetail ? (
                 <Card className="p-6">
@@ -936,9 +1013,9 @@ export default function CandidateDashboard() {
                 <div className="mt-4 flex items-center justify-between gap-4">
                   <div>
                     <div className="text-sm font-medium">Delete Account</div>
-                    <div className="text-sm text-muted-foreground">For demo: action is simulated</div>
+                    <div className="text-sm text-muted-foreground">Coming soon</div>
                   </div>
-                  <Button variant="destructive" size="sm" onClick={() => console.log("Delete account")}>
+                  <Button variant="destructive" size="sm" disabled>
                     Delete
                   </Button>
                 </div>

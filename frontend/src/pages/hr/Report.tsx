@@ -28,44 +28,6 @@ import { SCORE_DIMENSIONS } from "@/lib/constants"
 import { useTheme } from "@/lib/theme-context"
 import type { Candidate, Question, ScoreBreakdown } from "@/types"
 
-// ── Mock data ─────────────────────────────────────────────────────────────────
-
-const MOCK_CANDIDATE: Candidate = {
-  id: "mock-1",
-  name: "Rahul Sharma",
-  email: "rahul.sharma@example.com",
-  phone: "+91 98765 43210",
-  resume_url: null,
-  resume_parsed: {},
-  created_at: "2026-03-28T14:00:00Z",
-}
-
-const MOCK_QUESTIONS: Question[] = [
-  { id: "q1", interview_id: "mock-interview-1", question_order: 1, category: "technical", question_text: "Can you explain the difference between supervised and unsupervised learning with a real-world example?" },
-  { id: "q2", interview_id: "mock-interview-1", question_order: 2, category: "technical", question_text: "How would you handle class imbalance in a binary classification problem?" },
-  { id: "q3", interview_id: "mock-interview-1", question_order: 3, category: "technical", question_text: "Walk me through how gradient descent works and its common variants." },
-  { id: "q4", interview_id: "mock-interview-1", question_order: 4, category: "technical", question_text: "What is regularisation and why is it important? Compare L1 and L2." },
-  { id: "q5", interview_id: "mock-interview-1", question_order: 5, category: "role_fit", question_text: "Describe a machine learning project you built end-to-end. What were the biggest challenges?" },
-  { id: "q6", interview_id: "mock-interview-1", question_order: 6, category: "behavioral", question_text: "Tell me about a time you had to explain a complex model to a non-technical stakeholder." },
-  { id: "q7", interview_id: "mock-interview-1", question_order: 7, category: "technical", question_text: "How do you evaluate and monitor a model in production?" },
-  { id: "q8", interview_id: "mock-interview-1", question_order: 8, category: "curveball", question_text: "If you could redesign the transformer architecture, what would you change and why?" },
-]
-
-type MockResponse = { id: string; interview_id: string; question_id: string; transcript: string; scores: ScoreBreakdown; feedback: string }
-
-const MOCK_RESPONSES: MockResponse[] = [
-  { id: "r1", interview_id: "mock-interview-1", question_id: "q1", transcript: "Supervised learning uses labelled data — for example, predicting house prices where you have input features and known sale prices. Unsupervised learning finds patterns without labels, like customer segmentation using k-means clustering.", scores: { technical_depth: 8.5, communication: 8.0, relevance: 9.0, confidence: 8.0 }, feedback: "Clear, accurate answer with good examples." },
-  { id: "r2", interview_id: "mock-interview-1", question_id: "q2", transcript: "I'd start by analysing the imbalance ratio. For mild imbalance I use class-weighted loss. For severe cases I combine SMOTE oversampling on the minority class with undersampling the majority, then evaluate using F1 and AUC-ROC rather than accuracy.", scores: { technical_depth: 9.0, communication: 8.5, relevance: 8.5, confidence: 8.0 }, feedback: "Excellent — mentioned correct metrics." },
-  { id: "r3", interview_id: "mock-interview-1", question_id: "q3", transcript: "Gradient descent minimises the loss by iteratively updating parameters in the direction of the negative gradient. Variants include SGD which uses one sample per step, mini-batch GD, Adam which adds adaptive learning rates and momentum, and RMSprop.", scores: { technical_depth: 8.5, communication: 8.0, relevance: 8.0, confidence: 8.5 }, feedback: "Good coverage of variants." },
-  { id: "r4", interview_id: "mock-interview-1", question_id: "q4", transcript: "Regularisation adds a penalty to the loss to reduce overfitting. L2 (Ridge) penalises squared weights, shrinking them toward zero but keeping all features. L1 (Lasso) uses absolute values, producing sparse solutions by pushing some weights to exactly zero.", scores: { technical_depth: 8.5, communication: 8.5, relevance: 8.0, confidence: 8.0 }, feedback: "Correct distinction, concise." },
-  { id: "r5", interview_id: "mock-interview-1", question_id: "q5", transcript: "I built a churn prediction system for a SaaS product. I collected 18 months of behavioural data, engineered features like session frequency and support ticket rate, trained an XGBoost model, and deployed it as a FastAPI service on AWS. The hardest part was feature drift in production — I set up a monitoring pipeline using Evidently.", scores: { technical_depth: 8.0, communication: 8.5, relevance: 9.0, confidence: 7.5 }, feedback: "Strong end-to-end narrative." },
-  { id: "r6", interview_id: "mock-interview-1", question_id: "q6", transcript: "I presented a recommendation model to the marketing team. Instead of discussing AUC, I framed it as 'for every 100 emails sent, this model identifies the 30 most likely to convert'. I used a confusion matrix as a visual and kept the focus on business impact.", scores: { technical_depth: 7.5, communication: 9.0, relevance: 8.5, confidence: 8.0 }, feedback: "Great stakeholder translation." },
-  { id: "r7", interview_id: "mock-interview-1", question_id: "q7", transcript: "I track data drift using statistical tests like KS or PSI, monitor prediction distribution, set up alerts for anomalies, and log feature importance over time. I also schedule periodic retraining triggered by performance degradation below a threshold.", scores: { technical_depth: 8.5, communication: 8.0, relevance: 8.5, confidence: 8.0 }, feedback: "Comprehensive monitoring strategy." },
-  { id: "r8", interview_id: "mock-interview-1", question_id: "q8", transcript: "I'd explore replacing the full self-attention with a sparse or linear attention mechanism to reduce the O(n²) complexity, making it practical for very long sequences. I'd also experiment with dynamic depth — allowing the network to exit early for simpler inputs.", scores: { technical_depth: 8.5, communication: 7.5, relevance: 7.5, confidence: 7.5 }, feedback: "Creative and technically grounded." },
-]
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-
 type InterviewResponseRow = {
   id: string
   interview_id: string
@@ -168,26 +130,10 @@ export default function ReportPage() {
         if (cancelled) return
         console.error("Failed to load report:", e)
         setError(e instanceof Error ? e.message : "Failed to load report")
-        setReport({
-          candidate_name: "Unknown",
-          candidate_email: "",
-          job_role: "Unknown",
-          overall_score: 0,
-          technical_depth: 0,
-          communication: 0,
-          relevance: 0,
-          confidence: 0,
-          recommendation: "REVIEW",
-          strengths: ["Data not available"],
-          weaknesses: ["Report not generated yet"],
-          transcript: [],
-        })
-        setInterview({
-          interview: { id: id ?? "mock", candidate_id: "mock-1", job_role: "ML Engineer", created_at: "2026-03-28T14:00:00Z" },
-          responses: MOCK_RESPONSES,
-        })
-        setQuestions(MOCK_QUESTIONS)
-        setCandidate(MOCK_CANDIDATE)
+        setReport(null)
+        setInterview(null)
+        setQuestions([])
+        setCandidate(null)
       } finally {
         if (!cancelled) setLoading(false)
       }

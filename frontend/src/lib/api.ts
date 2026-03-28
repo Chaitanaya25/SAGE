@@ -7,10 +7,11 @@ function getHeaders(): HeadersInit {
   return h
 }
 
-export async function uploadResume(file: File, jobRole: string) {
+export async function uploadResume(file: File, jobRole: string, candidateId?: string) {
   const fd = new FormData()
   fd.append("file", file)
   fd.append("job_role", jobRole)
+  if (candidateId) fd.append("candidate_id", candidateId)
   const r = await fetch(API_URL + "/api/upload-resume", { method: "POST", body: fd })
   if (!r.ok) throw new Error("Upload failed")
   return r.json()
@@ -36,6 +37,26 @@ export async function getCandidates() {
 
 export async function getInterviews(signal?: AbortSignal) {
   const r = await fetch(API_URL + "/api/interviews", { headers: getHeaders(), signal })
+  if (!r.ok) throw new Error("Failed")
+  return r.json()
+}
+
+export async function scheduleInterview(payload: {
+  candidateId: string
+  jobRole: string
+  scheduledAt: string
+  company?: string
+}) {
+  const r = await fetch(API_URL + "/api/interviews/schedule", {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({
+      candidate_id: payload.candidateId,
+      job_role: payload.jobRole,
+      scheduled_at: payload.scheduledAt,
+      company: payload.company ?? "",
+    }),
+  })
   if (!r.ok) throw new Error("Failed")
   return r.json()
 }

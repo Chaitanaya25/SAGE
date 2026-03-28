@@ -56,6 +56,13 @@ class CandidateLoginRequest(BaseModel):
     name: str
 
 
+class ScheduleInterviewRequest(BaseModel):
+    candidate_id: str
+    job_role: str
+    scheduled_at: str
+    company: str | None = None
+
+
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok", "service": "sage-backend"}
@@ -67,20 +74,30 @@ async def ws_interview(websocket: WebSocket, candidate_id: str) -> None:
 
 
 @app.post("/api/upload-resume")
-async def upload_resume(file: UploadFile = File(...), job_role: str = Form(...)) -> dict:
+async def upload_resume(
+    file: UploadFile = File(...),
+    job_role: str = Form(...),
+    candidate_id: str | None = Form(None),
+) -> dict:
     try:
         pdf_bytes = await file.read()
 
-        candidate = await save_candidate(
-            {
-                "name": "",
-                "email": "",
-                "phone": "",
-                "resume_url": file.filename,
-                "resume_parsed": {},
-            }
-        )
-        candidate_id = candidate["id"]
+        if candidate_id:
+            existing = await get_candidate(candidate_id)
+            if not existing:
+                raise HTTPException(status_code=404, detail="Candidate not found")
+            await update_candidate(candidate_id, {"resume_url": file.filename})
+        else:
+            candidate = await save_candidate(
+                {
+                    "name": "",
+                    "email": "",
+                    "phone": "",
+                    "resume_url": file.filename,
+                    "resume_parsed": {},
+                }
+            )
+            candidate_id = candidate["id"]
 
         interview = await save_interview(
             {"candidate_id": candidate_id, "job_role": job_role, "status": "pending"}
@@ -94,6 +111,7 @@ async def upload_resume(file: UploadFile = File(...), job_role: str = Form(...))
             "interview_id": interview_id,
             "status": result.get("status", "unknown"),
             "questions_count": len(result.get("questions", [])),
+            "resume_parsed": result.get("resume_parsed", {}),
         }
     except Exception as e:
         logger.error("Upload failed: %s", e)
@@ -124,6 +142,31 @@ async def list_candidates() -> dict:
 async def list_interviews() -> dict:
     interviews = await get_all_interviews()
     return {"interviews": interviews}
+
+
+@app.post("/api/interviews/schedule")
+async def schedule_interview(req: ScheduleInterviewRequest) -> dict:
+    try:
+        try:
+            datetime.fromisoformat(req.scheduled_at.replace("Z", "+00:00"))
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid scheduled_at")
+
+        interview = await save_interview(
+            {
+                "candidate_id": req.candidate_id,
+                "job_role": req.job_role,
+                "status": "pending",
+                "scheduled_at": req.scheduled_at,
+                "company": req.company or "",
+            }
+        )
+        return {"interview": interview}
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.error("Scheduling failed: %s", e)
+        raise HTTPException(status_code=500, detail=str(e)) from e
 
 
 @app.get("/api/interview/{interview_id}")

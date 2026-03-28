@@ -30,11 +30,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { getCandidates, getInterviews, getReport } from "@/lib/api"
+import { getCandidates, getInterviews } from "@/lib/api"
 import { useTheme } from "@/lib/theme-context"
-import type { Candidate, Interview, Report } from "@/types"
-
-// ── Mock data ─────────────────────────────────────────────────────────────────
+import type { Candidate, Interview } from "@/types"
 
 interface MockRow {
   id: string
@@ -45,19 +43,6 @@ interface MockRow {
   status: "Evaluated" | "In Progress" | "Pending"
   date: string
 }
-
-const MOCK: MockRow[] = [
-  { id: "1",  name: "Rahul Sharma",  email: "rahul@email.com",  role: "ML Engineer",         score: 8.2,  status: "Evaluated",   date: "Mar 28, 2026" },
-  { id: "2",  name: "Priya Patel",   email: "priya@email.com",  role: "Frontend Developer",  score: 7.5,  status: "Evaluated",   date: "Mar 27, 2026" },
-  { id: "3",  name: "Arjun Singh",   email: "arjun@email.com",  role: "Backend Developer",   score: null, status: "In Progress", date: "Mar 28, 2026" },
-  { id: "4",  name: "Sneha Gupta",   email: "sneha@email.com",  role: "Data Analyst",        score: 6.8,  status: "Evaluated",   date: "Mar 26, 2026" },
-  { id: "5",  name: "Vikram Rao",    email: "vikram@email.com", role: "DevOps Engineer",     score: 9.1,  status: "Evaluated",   date: "Mar 25, 2026" },
-  { id: "6",  name: "Ananya Iyer",   email: "ananya@email.com", role: "Product Manager",     score: 7.0,  status: "Evaluated",   date: "Mar 25, 2026" },
-  { id: "7",  name: "Karan Mehta",   email: "karan@email.com",  role: "Software Engineer",   score: null, status: "Pending",     date: "Mar 28, 2026" },
-  { id: "8",  name: "Divya Nair",    email: "divya@email.com",  role: "UX Designer",         score: 8.5,  status: "Evaluated",   date: "Mar 24, 2026" },
-  { id: "9",  name: "Amit Kumar",    email: "amit@email.com",   role: "ML Engineer",         score: 5.2,  status: "Evaluated",   date: "Mar 23, 2026" },
-  { id: "10", name: "Neha Joshi",    email: "neha@email.com",   role: "Frontend Developer",  score: null, status: "In Progress", date: "Mar 28, 2026" },
-]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -105,18 +90,17 @@ export default function Dashboard() {
 
   const [activeTab, setActiveTab] = useState<"dashboard" | "candidates" | "settings" | "pricing">("dashboard")
   const [loading, setLoading] = useState(true)
-  const [rows, setRows] = useState<MockRow[]>(MOCK)
+  const [rows, setRows] = useState<MockRow[]>([])
   const [query, setQuery] = useState("")
   const candidatesRef = useRef<HTMLDivElement | null>(null)
 
   const [stats, setStats] = useState({
-    totalCandidates: 47,
-    completed: 38,
-    avgScore: 7.4,
-    hireRate: 34,
+    totalCandidates: 0,
+    completed: 0,
+    avgScore: 0,
+    hireRate: 0,
   })
 
-  // Try real API, fall back to mock
   useEffect(() => {
     let cancelled = false
     async function load() {
@@ -126,18 +110,6 @@ export default function Dashboard() {
         if (cancelled) return
         const candidates: Candidate[] = cRes.candidates ?? []
         const interviews: Interview[] = iRes.interviews ?? []
-        if (interviews.length === 0 && candidates.length === 0) throw new Error("empty")
-
-        const completed = interviews.filter((iv) => iv.status === "completed")
-        const reportSettled = await Promise.allSettled(
-          completed.map(async (iv) => ({ id: iv.id, report: await getReport(iv.id) as Report }))
-        )
-        if (cancelled) return
-
-        const reportMap: Record<string, Report> = {}
-        for (const s of reportSettled) {
-          if (s.status === "fulfilled") reportMap[s.value.id] = s.value.report
-        }
 
         const candidateById = new Map(candidates.map((c) => [c.id, c]))
         const apiRows: MockRow[] = interviews
@@ -145,7 +117,6 @@ export default function Dashboard() {
           .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
           .map((iv) => {
             const c = candidateById.get(iv.candidate_id)
-            const r = reportMap[iv.id]
             const statusMap: Record<string, MockRow["status"]> = {
               completed: "Evaluated",
               in_progress: "In Progress",
@@ -158,29 +129,43 @@ export default function Dashboard() {
               name: c?.name || "Unknown",
               email: c?.email || "",
               role: iv.job_role,
-              score: typeof r?.overall_score === "number" ? r.overall_score : null,
+              score: (() => {
+                const v = (iv as unknown as { overall_score?: unknown }).overall_score
+                return typeof v === "number" ? v : null
+              })(),
               status: statusMap[iv.status] ?? "Pending",
               date: formatDate(iv.created_at),
             }
           })
 
-        const reportList = Object.values(reportMap)
-        const avgScore = reportList.length
-          ? reportList.reduce((s, r) => s + (r.overall_score ?? 0), 0) / reportList.length
-          : 0
-        const hireRate = reportList.length
-          ? (reportList.filter((r) => r.recommendation === "HIRE").length / reportList.length) * 100
-          : 0
+        const completed = interviews.filter((iv) => iv.status === "completed")
+        const completedWithScore = completed
+          .map((iv) => (iv as unknown as { overall_score?: unknown }).overall_score)
+          .map((v) => (typeof v === "number" ? v : NaN))
+          .filter((v) => Number.isFinite(v))
+        const avgScore = completedWithScore.length ? completedWithScore.reduce((s, v) => s + v, 0) / completedWithScore.length : 0
 
-        setRows(apiRows.length ? apiRows : MOCK)
+        let hireRate = 0
+        try {
+          const hired = JSON.parse(localStorage.getItem("sage_hired") || "[]") as string[]
+          hireRate = candidates.length ? (hired.length / candidates.length) * 100 : 0
+        } catch {
+          hireRate = 0
+        }
+
+        setRows(apiRows)
         setStats({
-          totalCandidates: candidates.length || 47,
-          completed: completed.length || 38,
-          avgScore: Number.isFinite(avgScore) ? avgScore : 7.4,
-          hireRate: Number.isFinite(hireRate) ? hireRate : 34,
+          totalCandidates: candidates.length,
+          completed: completed.length,
+          avgScore: Number.isFinite(avgScore) ? avgScore : 0,
+          hireRate: Number.isFinite(hireRate) ? hireRate : 0,
         })
-      } catch {
-        if (!cancelled) { setRows(MOCK) }
+      } catch (e) {
+        console.error("Failed to load dashboard data:", e)
+        if (!cancelled) {
+          setRows([])
+          setStats({ totalCandidates: 0, completed: 0, avgScore: 0, hireRate: 0 })
+        }
       } finally {
         if (!cancelled) setLoading(false)
       }
