@@ -68,10 +68,23 @@ export function Header() {
 					<Button size="icon" variant="outline" onClick={toggleTheme} aria-label="Toggle theme">
 						{isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
 					</Button>
-					<Button asChild variant="outline">
+					<Button
+						asChild
+						variant={isDark ? 'outline' : 'default'}
+						className={
+							isDark
+								? undefined
+								: 'bg-black text-white hover:bg-black/90 border border-black'
+						}
+					>
 						<Link to="/hr/login">HR Portal</Link>
 					</Button>
-					<Button asChild>
+					<Button
+						asChild
+						className={
+							isDark ? undefined : 'bg-black text-white hover:bg-black/90 border border-black'
+						}
+					>
 						<Link to="/upload">Start Interview</Link>
 					</Button>
 				</div>
@@ -105,10 +118,23 @@ export function Header() {
 					<Button size="icon" variant="outline" onClick={toggleTheme} aria-label="Toggle theme">
 						{isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
 					</Button>
-					<Button asChild variant="outline" className="w-full bg-transparent">
+					<Button
+						asChild
+						variant={isDark ? 'outline' : 'default'}
+						className={
+							isDark
+								? 'w-full bg-transparent'
+								: 'w-full bg-black text-white hover:bg-black/90 border border-black'
+						}
+					>
 						<Link to="/hr/login">HR Portal</Link>
 					</Button>
-					<Button asChild className="w-full">
+					<Button
+						asChild
+						className={
+							isDark ? 'w-full' : 'w-full bg-black text-white hover:bg-black/90 border border-black'
+						}
+					>
 						<Link to="/upload">Start Interview</Link>
 					</Button>
 				</div>

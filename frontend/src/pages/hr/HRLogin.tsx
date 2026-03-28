@@ -276,7 +276,7 @@ export default function HRLogin() {
                     type="button"
                     aria-label={showPassword ? "Hide password" : "Show password"}
                     className={[
-                      "cursor-target absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-md transition-colors duration-300",
+                      "absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-md transition-colors duration-300",
                       isDark ? "text-zinc-400 hover:text-zinc-200" : "text-zinc-500 hover:text-zinc-800",
                     ].join(" ")}
                     onClick={() => setShowPassword((v) => !v)}

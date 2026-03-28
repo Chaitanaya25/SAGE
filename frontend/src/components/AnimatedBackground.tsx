@@ -1,35 +1,39 @@
-import { GridScan } from "@/components/GridScan.jsx"
 import PixelBlast from "@/components/PixelBlast.jsx"
 import { useTheme } from "@/lib/theme-context"
+import Particles from "@/components/Particles.jsx"
 
 type Props = {
-  variant: "pixelblast" | "gridscan"
+  variant: "particles" | "pixelblast"
 }
 
 export default function AnimatedBackground({ variant }: Props) {
   const { theme } = useTheme()
 
-  if (variant === "gridscan") {
+  if (variant === "particles") {
     return (
-      <div style={{ position: "absolute", inset: 0, zIndex: 0 }}>
-        <GridScan
-          sensitivity={0.55}
-          lineThickness={1}
-          linesColor={theme === "dark" ? "#392e4e" : "#d1d5db"}
-          scanColor={theme === "dark" ? "#FF9FFC" : "#7C3AED"}
-          gridScale={0.1}
-          scanOpacity={0.4}
-          enablePost
-          bloomIntensity={0.6}
-          chromaticAberration={0.002}
-          noiseIntensity={0.01}
+      <div className="fixed inset-0 z-0 pointer-events-none">
+        <Particles
+          particleColors={
+            theme === "dark"
+              ? ["#7C3AED", "#A855F7", "#C084FC", "#6D28D9"]
+              : ["#FFFFFF", "#F8FAFC", "#E5E7EB"]
+          }
+          particleCount={420}
+          particleSpread={14}
+          speed={0.3}
+          particleBaseSize={190}
+          moveParticlesOnHover
+          particleHoverFactor={1}
+          alphaParticles
+          disableRotation={false}
+          pixelRatio={1}
         />
       </div>
     )
   }
 
   return (
-    <div style={{ position: "absolute", inset: 0, zIndex: 0 }}>
+    <div className="fixed inset-0 z-0 pointer-events-none">
       <PixelBlast
         variant="circle"
         pixelSize={4}

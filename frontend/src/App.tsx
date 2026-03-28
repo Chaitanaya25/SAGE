@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom"
 
 import CandidateDone from "@/pages/candidate/Done"
+import CandidateAnalyze from "@/pages/candidate/Analyze"
 import CandidateHome from "@/pages/candidate/Home"
 import CandidateInterview from "@/pages/candidate/Interview"
 import CandidateLogin from "@/pages/candidate/Login"
@@ -15,6 +16,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Navigate to="/home" replace />} />
         <Route path="/home" element={<CandidateHome />} />
+        <Route path="/analyze" element={<CandidateAnalyze />} />
         <Route path="/login" element={<CandidateLogin />} />
         <Route path="/upload" element={<CandidateUpload />} />
         <Route path="/interview" element={<CandidateInterview />} />
