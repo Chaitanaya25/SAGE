@@ -78,7 +78,7 @@ function AnalyzeInner() {
     setError(null)
     setResult(null)
     try {
-      const res = (await uploadResume(file, targetRole, candidateId || undefined)) as UploadResult
+      const res = (await uploadResume(file, targetRole, candidateId || undefined, undefined)) as UploadResult
       localStorage.setItem("sage_candidate_id", res.candidate_id)
       localStorage.setItem("sage_interview_id", res.interview_id)
 

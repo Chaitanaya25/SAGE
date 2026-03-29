@@ -15,6 +15,10 @@ export interface Interview {
   status: "pending" | "in_progress" | "completed" | "failed" | "interrupted" | "timed_out"
   created_at: string
   completed_at: string | null
+  overall_score?: number | null
+  scheduled_at?: string | null
+  job_id?: string | null
+  company?: string | null
 }
 
 export interface Question {

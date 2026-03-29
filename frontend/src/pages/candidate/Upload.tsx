@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Link, useNavigate } from "react-router-dom"
+import { Link, useLocation, useNavigate } from "react-router-dom"
 import {
   ArrowLeft,
   CheckCircle,
@@ -23,11 +23,14 @@ function formatBytes(bytes: number) {
 }
 
 export default function Upload() {
+  const location = useLocation() as unknown as { state?: { jobId?: string; jobRole?: string } }
   const navigate = useNavigate()
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [file, setFile] = useState<File | null>(null)
   type JobRole = (typeof JOB_ROLES)[number]
-  const [jobRole, setJobRole] = useState<JobRole | "">("")
+  const [jobRole, setJobRole] = useState<JobRole | "">(
+    (JOB_ROLES.includes((location.state?.jobRole as JobRole) ?? ("" as JobRole)) ? (location.state?.jobRole as JobRole) : "") ?? ""
+  )
   const [dragging, setDragging] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -71,7 +74,10 @@ export default function Upload() {
     setLoading(true)
     setError(null)
     try {
-      const result = await uploadResume(file, jobRole)
+      const candidate = JSON.parse(localStorage.getItem("sage_candidate") ?? "{}") as { id?: string; candidate_id?: string }
+      const candidateId = candidate.id ?? candidate.candidate_id ?? localStorage.getItem("sage_candidate_id") ?? ""
+      const jobId = String(location.state?.jobId ?? "")
+      const result = await uploadResume(file, jobRole, candidateId || undefined, jobId || undefined)
       localStorage.setItem("sage_candidate_id", result.candidate_id)
       localStorage.setItem("sage_interview_id", result.interview_id)
       navigate("/interview", {

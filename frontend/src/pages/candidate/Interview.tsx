@@ -35,7 +35,7 @@ function unlockAudio() {
 
 export default function Interview() {
   const location = useLocation() as unknown as {
-    state?: { candidateId?: string; interviewId?: string; jobRole?: string }
+    state?: { candidateId?: string; interviewId?: string; jobRole?: string; jobId?: string; jobTitle?: string; companyName?: string }
   }
   const navigate = useNavigate()
   const { theme } = useTheme()
@@ -44,6 +44,7 @@ export default function Interview() {
   const navCandidateId = location.state?.candidateId ?? ""
   const navInterviewId = location.state?.interviewId ?? ""
   const navJobRole     = location.state?.jobRole     ?? ""
+  const navJobId       = location.state?.jobId       ?? ""
 
   // ── Pre-interview state ───────────────────────────────────────────────────
   const [step,        setStep]        = useState<Step>(navCandidateId ? "ready" : "upload")
@@ -253,6 +254,10 @@ export default function Interview() {
       const formData = new FormData()
       formData.append("file", file)
       formData.append("job_role", jobRole)
+      const candidate = JSON.parse(localStorage.getItem("sage_candidate") ?? "{}") as { id?: string; candidate_id?: string }
+      const existingCandidateId = candidate.id ?? candidate.candidate_id ?? localStorage.getItem("sage_candidate_id") ?? ""
+      if (existingCandidateId) formData.append("candidate_id", existingCandidateId)
+      if (navJobId) formData.append("job_id", navJobId)
 
       const token = localStorage.getItem("sage_token")
       const res = await fetch("http://localhost:8000/api/upload-resume", {

@@ -7,11 +7,12 @@ function getHeaders(): HeadersInit {
   return h
 }
 
-export async function uploadResume(file: File, jobRole: string, candidateId?: string) {
+export async function uploadResume(file: File, jobRole: string, candidateId?: string, jobId?: string) {
   const fd = new FormData()
   fd.append("file", file)
   fd.append("job_role", jobRole)
   if (candidateId) fd.append("candidate_id", candidateId)
+  if (jobId) fd.append("job_id", jobId)
   const r = await fetch(API_URL + "/api/upload-resume", { method: "POST", body: fd })
   if (!r.ok) throw new Error("Upload failed")
   return r.json()
@@ -56,6 +57,59 @@ export async function scheduleInterview(payload: {
       scheduled_at: payload.scheduledAt,
       company: payload.company ?? "",
     }),
+  })
+  if (!r.ok) throw new Error("Failed")
+  return r.json()
+}
+
+export type JobPosting = {
+  id: string
+  company_name: string
+  company_email: string
+  job_title: string
+  job_role: string
+  job_description: string
+  requirements?: string | null
+  salary_range?: string | null
+  location?: string | null
+  deadline?: string | null
+  max_candidates?: number | null
+  status?: string | null
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export async function getJobs(payload?: { all?: boolean; signal?: AbortSignal }) {
+  const qs = payload?.all ? "?all=true" : ""
+  const r = await fetch(API_URL + "/api/jobs" + qs, { headers: getHeaders(), signal: payload?.signal })
+  if (!r.ok) throw new Error("Failed")
+  return r.json()
+}
+
+export async function createJobPosting(data: Omit<JobPosting, "id" | "created_at" | "updated_at">) {
+  const r = await fetch(API_URL + "/api/jobs", {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify(data),
+  })
+  if (!r.ok) throw new Error("Failed")
+  return r.json()
+}
+
+export async function updateJobPosting(jobId: string, data: Partial<JobPosting>) {
+  const r = await fetch(API_URL + "/api/jobs/" + jobId, {
+    method: "PUT",
+    headers: getHeaders(),
+    body: JSON.stringify(data),
+  })
+  if (!r.ok) throw new Error("Failed")
+  return r.json()
+}
+
+export async function deleteJobPosting(jobId: string) {
+  const r = await fetch(API_URL + "/api/jobs/" + jobId, {
+    method: "DELETE",
+    headers: getHeaders(),
   })
   if (!r.ok) throw new Error("Failed")
   return r.json()

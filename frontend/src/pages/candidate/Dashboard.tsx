@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
-import { BarChart3, Calendar, CheckCircle, CreditCard, FileSearch, FileText, LayoutDashboard, LogOut, Mic, Moon, Settings, Sun, TrendingUp } from "lucide-react"
+import { BarChart3, Briefcase, Calendar, CheckCircle, CreditCard, FileSearch, FileText, LayoutDashboard, LogOut, Mic, Moon, Settings, Sun, TrendingUp } from "lucide-react"
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart } from "recharts"
 
 import { AnalyzeContent } from "@/pages/candidate/Analyze"
@@ -27,9 +27,10 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
+import { getJobs, type JobPosting } from "@/lib/api"
 import { useTheme } from "@/lib/theme-context"
 
-type Tab = "overview" | "resume" | "interviews" | "schedule" | "scores" | "reports" | "settings" | "pricing"
+type Tab = "overview" | "jobs" | "resume" | "interviews" | "schedule" | "scores" | "reports" | "settings" | "pricing"
 
 type CandidateReportDetail = {
   id: string
@@ -91,9 +92,14 @@ export default function CandidateDashboard() {
   const [reportDetail, setReportDetail] = useState<CandidateReportDetail | null>(null)
   const [reportLoading, setReportLoading] = useState(false)
   const [reportError, setReportError] = useState<string | null>(null)
+  const [jobs, setJobs] = useState<JobPosting[]>([])
+  const [jobsLoading, setJobsLoading] = useState(false)
+  const [jobsError, setJobsError] = useState<string | null>(null)
+  const [jobsQuery, setJobsQuery] = useState("")
 
   const tabTitles: Record<Tab, string> = {
     overview: "Overview",
+    jobs: "Browse Jobs",
     resume: "Resume Analysis",
     interviews: "Voice Interviews",
     schedule: "Schedule",
@@ -339,6 +345,37 @@ export default function CandidateDashboard() {
     }
   }, [candidateId, candidate.resume_parsed])
 
+  useEffect(() => {
+    if (tab !== "jobs") return
+    let cancelled = false
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), 10000)
+
+    ;(async () => {
+      setJobsLoading(true)
+      setJobsError(null)
+      try {
+        const raw = (await getJobs({ signal: controller.signal })) as unknown
+        const arr: JobPosting[] = Array.isArray(raw) ? (raw as JobPosting[]) : []
+        if (cancelled) return
+        setJobs(arr)
+      } catch (e) {
+        if (cancelled) return
+        setJobs([])
+        setJobsError(e instanceof Error ? e.message : "Failed to load jobs")
+      } finally {
+        if (!cancelled) setJobsLoading(false)
+        window.clearTimeout(timeout)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeout)
+      controller.abort()
+    }
+  }, [tab])
+
   const upcomingInterviews = useMemo(() => {
     return interviews
       .filter((iv) => iv.status === "pending" || iv.status === "in_progress")
@@ -418,6 +455,18 @@ export default function CandidateDashboard() {
       })
   }, [interviews])
 
+  const filteredJobs = useMemo(() => {
+    const q = jobsQuery.trim().toLowerCase()
+    if (!q) return jobs
+    return jobs.filter((j) => {
+      const title = String(j.job_title ?? "").toLowerCase()
+      const role = String(j.job_role ?? "").toLowerCase()
+      const company = String(j.company_name ?? "").toLowerCase()
+      const location = String(j.location ?? "").toLowerCase()
+      return title.includes(q) || role.includes(q) || company.includes(q) || location.includes(q)
+    })
+  }, [jobs, jobsQuery])
+
   return (
     <SidebarProvider>
       <Sidebar collapsible="icon">
@@ -435,6 +484,11 @@ export default function CandidateDashboard() {
               <SidebarMenuItem>
                 <SidebarMenuButton isActive={tab === "overview"} onClick={() => setTab("overview")}>
                   <LayoutDashboard className="w-4 h-4" /> Overview
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton isActive={tab === "jobs"} onClick={() => setTab("jobs")}>
+                  <Briefcase className="w-4 h-4" /> Browse Jobs
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
@@ -706,6 +760,73 @@ export default function CandidateDashboard() {
                   )}
                 </CardContent>
               </Card>
+            </div>
+          ) : null}
+
+          {tab === "jobs" ? (
+            <div className="max-w-5xl">
+              <div className="flex items-start justify-between gap-4 flex-wrap">
+                <div>
+                  <div className="text-2xl font-semibold">Available Positions</div>
+                  <div className="text-sm text-muted-foreground">Browse open roles and start your application</div>
+                </div>
+                <div className="w-full sm:w-80">
+                  <Input
+                    value={jobsQuery}
+                    onChange={(e) => setJobsQuery(e.target.value)}
+                    placeholder="Search by title, role, company…"
+                  />
+                </div>
+              </div>
+
+              <div className="mt-6">
+                {jobsLoading ? (
+                  <div className="text-sm text-muted-foreground">Loading jobs…</div>
+                ) : jobsError ? (
+                  <div className="text-sm text-muted-foreground">No open positions right now. Check back soon!</div>
+                ) : filteredJobs.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">No open positions right now. Check back soon!</div>
+                ) : (
+                  <div className="space-y-4">
+                    {filteredJobs.map((job) => (
+                      <Card key={job.id} className="p-5">
+                        <div className="flex justify-between items-start gap-6 flex-wrap">
+                          <div className="min-w-0 flex-1">
+                            <h3 className="font-semibold text-lg">{job.job_title}</h3>
+                            <p className="text-muted-foreground">
+                              {job.company_name} · {job.location || "Remote"}
+                            </p>
+                            <p className="text-sm mt-2">
+                              {String(job.job_description ?? "").length > 200
+                                ? `${String(job.job_description).slice(0, 200)}...`
+                                : String(job.job_description ?? "")}
+                            </p>
+                            <div className="flex flex-wrap gap-2 mt-3">
+                              <Badge>{job.job_role}</Badge>
+                              {job.salary_range ? <Badge variant="outline">{job.salary_range}</Badge> : null}
+                              {job.deadline ? (
+                                <Badge variant="outline">
+                                  Deadline: {new Date(job.deadline).toLocaleDateString()}
+                                </Badge>
+                              ) : null}
+                            </div>
+                          </div>
+                          <Button
+                            className={isDark ? "bg-white text-black hover:bg-white/90 border-white" : "bg-black text-white hover:bg-black/90 border border-black"}
+                            onClick={() =>
+                              navigate("/interview", {
+                                state: { jobRole: job.job_role, jobTitle: job.job_title, companyName: job.company_name, jobId: job.id },
+                              })
+                            }
+                          >
+                            Apply Now
+                          </Button>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           ) : null}
 

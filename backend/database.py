@@ -225,3 +225,78 @@ async def get_all_interviews() -> List[Dict[str, Any]]:
         return resp.data or []
 
     return await asyncio.to_thread(_op)
+
+
+async def create_job_posting(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _op() -> Optional[Dict[str, Any]]:
+        resp = _get_supabase().table("job_postings").insert(data).execute()
+        rows = resp.data or []
+        return rows[0] if rows else None
+
+    return await asyncio.to_thread(_op)
+
+
+async def get_job_postings(company_id: str | None = None) -> List[Dict[str, Any]]:
+    def _op() -> List[Dict[str, Any]]:
+        query = _get_supabase().table("job_postings").select("*").order("created_at", desc=True)
+        if company_id:
+            query = query.eq("company_id", company_id)
+        resp = query.execute()
+        return resp.data or []
+
+    return await asyncio.to_thread(_op)
+
+
+async def get_active_job_postings() -> List[Dict[str, Any]]:
+    def _op() -> List[Dict[str, Any]]:
+        resp = (
+            _get_supabase()
+            .table("job_postings")
+            .select("*")
+            .eq("status", "active")
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return resp.data or []
+
+    return await asyncio.to_thread(_op)
+
+
+async def get_job_posting(job_id: str) -> Optional[Dict[str, Any]]:
+    def _op() -> Optional[Dict[str, Any]]:
+        resp = (
+            _get_supabase()
+            .table("job_postings")
+            .select("*")
+            .eq("id", job_id)
+            .limit(1)
+            .execute()
+        )
+        rows = resp.data or []
+        return rows[0] if rows else None
+
+    return await asyncio.to_thread(_op)
+
+
+async def update_job_posting(job_id: str, data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _op() -> Optional[Dict[str, Any]]:
+        resp = (
+            _get_supabase()
+            .table("job_postings")
+            .update(data)
+            .eq("id", job_id)
+            .execute()
+        )
+        rows = resp.data or []
+        return rows[0] if rows else None
+
+    return await asyncio.to_thread(_op)
+
+
+async def delete_job_posting(job_id: str) -> bool:
+    def _op() -> bool:
+        resp = _get_supabase().table("job_postings").delete().eq("id", job_id).execute()
+        rows = resp.data or []
+        return bool(rows)
+
+    return await asyncio.to_thread(_op)

@@ -5,7 +5,7 @@ import logging
 from datetime import datetime
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile, WebSocket
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -29,13 +29,19 @@ app.add_middleware(
 
 from auth import create_token, verify_token
 from database import (
+    create_job_posting,
     get_all_candidates,
     get_all_interviews,
+    get_active_job_postings,
     get_candidate,
     get_interview,
+    get_job_posting,
+    get_job_postings,
     get_questions,
     get_report,
     get_responses,
+    update_job_posting,
+    delete_job_posting,
     save_candidate,
     save_interview,
     save_report,
@@ -78,6 +84,7 @@ async def upload_resume(
     file: UploadFile = File(...),
     job_role: str = Form(...),
     candidate_id: str | None = Form(None),
+    job_id: str | None = Form(None),
 ) -> dict:
     try:
         pdf_bytes = await file.read()
@@ -99,9 +106,10 @@ async def upload_resume(
             )
             candidate_id = candidate["id"]
 
-        interview = await save_interview(
-            {"candidate_id": candidate_id, "job_role": job_role, "status": "pending"}
-        )
+        interview_payload = {"candidate_id": candidate_id, "job_role": job_role, "status": "pending"}
+        if job_id:
+            interview_payload["job_id"] = job_id
+        interview = await save_interview(interview_payload)
         interview_id = interview["id"]
 
         result = await run_pre_interview_pipeline(candidate_id, interview_id, pdf_bytes, job_role)
@@ -116,6 +124,52 @@ async def upload_resume(
     except Exception as e:
         logger.error("Upload failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
+
+
+@app.post("/api/jobs")
+async def create_job(request: Request) -> dict:
+    data = await request.json()
+    required = ["company_name", "company_email", "job_title", "job_role", "job_description"]
+    for field in required:
+        if field not in data:
+            raise HTTPException(status_code=400, detail=f"Missing field: {field}")
+    created = await create_job_posting(data)
+    if not created:
+        raise HTTPException(status_code=500, detail="Failed to create job")
+    return created
+
+
+@app.get("/api/jobs")
+async def list_jobs(all: bool = False) -> list:
+    if all:
+        return await get_job_postings()
+    return await get_active_job_postings()
+
+
+@app.get("/api/jobs/{job_id}")
+async def get_job(job_id: str) -> dict:
+    job = await get_job_posting(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+
+
+@app.put("/api/jobs/{job_id}")
+async def update_job(job_id: str, request: Request) -> dict:
+    data = await request.json()
+    data["updated_at"] = datetime.utcnow().isoformat()
+    updated = await update_job_posting(job_id, data)
+    if not updated:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return updated
+
+
+@app.delete("/api/jobs/{job_id}")
+async def delete_job(job_id: str) -> dict:
+    deleted = await delete_job_posting(job_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return {"message": "Job deleted"}
 
 
 @app.get("/api/questions/{interview_id}")

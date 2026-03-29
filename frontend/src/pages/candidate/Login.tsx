@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { Eye, EyeOff, Lock, Mail, Moon, Sun, User } from "lucide-react"
+import { Building2, Eye, EyeOff, Lock, Mail, Moon, Sun, User } from "lucide-react"
 
 import Loader from "@/components/Loader"
 import PixelBlast from "@/components/PixelBlast.jsx"
@@ -24,6 +24,7 @@ export default function Login() {
 
   const [hrEmail, setHrEmail] = useState("")
   const [hrPassword, setHrPassword] = useState("")
+  const [hrCompany, setHrCompany] = useState("SAGE Demo Corp")
   const [showPassword, setShowPassword] = useState(false)
 
   const [error, setError] = useState<string | null>(null)
@@ -55,6 +56,7 @@ export default function Login() {
       localStorage.setItem("sage_token", result.token)
       localStorage.setItem("sage_user", JSON.stringify(result.user))
       localStorage.setItem("sage_role", "hr")
+      localStorage.setItem("sage_company", hrCompany.trim() || "SAGE Demo Corp")
       navigate("/hr/dashboard")
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed")
@@ -196,6 +198,20 @@ export default function Login() {
 
               <TabsContent value="hr">
                 <form className="grid gap-4" onSubmit={onHrLogin}>
+                  <div className="grid gap-2">
+                    <Label htmlFor="hr-company">Company Name</Label>
+                    <div className="relative">
+                      <Building2 className={["absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4", isDark ? "text-zinc-500" : "text-zinc-400"].join(" ")} />
+                      <Input
+                        id="hr-company"
+                        placeholder="Company name"
+                        value={hrCompany}
+                        onChange={(e) => setHrCompany(e.target.value)}
+                        className="pl-10"
+                        required
+                      />
+                    </div>
+                  </div>
                   <div className="grid gap-2">
                     <Label htmlFor="hr-email">Email</Label>
                     <div className="relative">

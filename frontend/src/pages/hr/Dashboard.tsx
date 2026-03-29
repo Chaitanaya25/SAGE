@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate } from "react-router-dom"
 import {
   BarChart3,
+  Briefcase,
   CheckCircle,
   CreditCard,
   LayoutDashboard,
@@ -30,14 +31,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { getCandidates, getInterviews } from "@/lib/api"
+import { createJobPosting, deleteJobPosting, getJobs, updateJobPosting, type JobPosting } from "@/lib/api"
 import { useTheme } from "@/lib/theme-context"
 import type { Candidate, Interview } from "@/types"
 
-interface MockRow {
+type CandidateRow = {
   id: string
   name: string
   email: string
+  job: string
   role: string
   score: number | null
   status: "Evaluated" | "In Progress" | "Pending"
@@ -47,13 +49,13 @@ interface MockRow {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function scoreColor(score: number | null) {
-  if (score === null) return ""
-  if (score >= 7) return "text-green-500"
-  if (score >= 5) return "text-amber-400"
+  if (score === null) return "text-muted-foreground"
+  if (score >= 7.5) return "text-green-500"
+  if (score >= 5) return "text-amber-500"
   return "text-red-500"
 }
 
-function StatusBadge({ status }: { status: MockRow["status"] }) {
+function StatusBadge({ status }: { status: CandidateRow["status"] }) {
   const { theme } = useTheme()
   const isDark = theme === "dark"
   const cls =
@@ -88,17 +90,37 @@ export default function Dashboard() {
   const { theme, toggleTheme } = useTheme()
   const isDark = theme === "dark"
 
-  const [activeTab, setActiveTab] = useState<"dashboard" | "candidates" | "settings" | "pricing">("dashboard")
+  const [activeTab, setActiveTab] = useState<"dashboard" | "jobs" | "candidates" | "settings" | "pricing">("dashboard")
   const [loading, setLoading] = useState(true)
-  const [rows, setRows] = useState<MockRow[]>([])
+  const [candidates, setCandidates] = useState<Candidate[]>([])
+  const [interviews, setInterviews] = useState<Interview[]>([])
+  const [jobPostings, setJobPostings] = useState<JobPosting[]>([])
   const [query, setQuery] = useState("")
   const candidatesRef = useRef<HTMLDivElement | null>(null)
-
-  const [stats, setStats] = useState({
-    totalCandidates: 0,
-    completed: 0,
-    avgScore: 0,
-    hireRate: 0,
+  const [jobsQuery, setJobsQuery] = useState("")
+  const [jobFormOpen, setJobFormOpen] = useState(false)
+  const [jobFormError, setJobFormError] = useState<string | null>(null)
+  const [jobFormSuccess, setJobFormSuccess] = useState<string | null>(null)
+  const [editingJobId, setEditingJobId] = useState<string | null>(null)
+  const [jobForm, setJobForm] = useState({
+    company_name: localStorage.getItem("sage_company") || "SAGE Demo Corp",
+    company_email: (() => {
+      try {
+        const u = JSON.parse(localStorage.getItem("sage_user") ?? "{}") as { email?: string }
+        return u.email || "admin@sage.ai"
+      } catch {
+        return "admin@sage.ai"
+      }
+    })(),
+    job_title: "",
+    job_role: "Software Engineer",
+    job_description: "",
+    requirements: "",
+    salary_range: "",
+    location: "Remote",
+    deadline: "",
+    max_candidates: 50,
+    status: "active",
   })
 
   useEffect(() => {
@@ -106,89 +128,112 @@ export default function Dashboard() {
     async function load() {
       setLoading(true)
       try {
-        const [cRes, iRes] = await Promise.all([getCandidates(), getInterviews()])
+        const token = localStorage.getItem("sage_token")
+        const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {}
+
+        const [candRes, intRes, jobsRes] = await Promise.all([
+          fetch("http://localhost:8000/api/candidates", { headers }),
+          fetch("http://localhost:8000/api/interviews", { headers }),
+          fetch("http://localhost:8000/api/jobs?all=true", { headers }),
+        ])
         if (cancelled) return
-        const candidates: Candidate[] = cRes.candidates ?? []
-        const interviews: Interview[] = iRes.interviews ?? []
 
-        const candidateById = new Map(candidates.map((c) => [c.id, c]))
-        const apiRows: MockRow[] = interviews
-          .slice()
-          .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
-          .map((iv) => {
-            const c = candidateById.get(iv.candidate_id)
-            const statusMap: Record<string, MockRow["status"]> = {
-              completed: "Evaluated",
-              in_progress: "In Progress",
-              pending: "Pending",
-              interrupted: "Pending",
-              timed_out: "Pending",
-            }
-            return {
-              id: iv.id,
-              name: c?.name || "Unknown",
-              email: c?.email || "",
-              role: iv.job_role,
-              score: (() => {
-                const v = (iv as unknown as { overall_score?: unknown }).overall_score
-                return typeof v === "number" ? v : null
-              })(),
-              status: statusMap[iv.status] ?? "Pending",
-              date: formatDate(iv.created_at),
-            }
-          })
-
-        const completed = interviews.filter((iv) => iv.status === "completed")
-        const completedWithScore = completed
-          .map((iv) => (iv as unknown as { overall_score?: unknown }).overall_score)
-          .map((v) => (typeof v === "number" ? v : NaN))
-          .filter((v) => Number.isFinite(v))
-        const avgScore = completedWithScore.length ? completedWithScore.reduce((s, v) => s + v, 0) / completedWithScore.length : 0
-
-        let hireRate = 0
-        try {
-          const hired = JSON.parse(localStorage.getItem("sage_hired") || "[]") as string[]
-          hireRate = candidates.length ? (hired.length / candidates.length) * 100 : 0
-        } catch {
-          hireRate = 0
+        if (candRes.ok) {
+          const raw = (await candRes.json()) as unknown
+          const arr: Candidate[] = Array.isArray(raw)
+            ? (raw as Candidate[])
+            : Array.isArray((raw as { candidates?: unknown[] } | null)?.candidates)
+              ? ((raw as { candidates: Candidate[] }).candidates ?? [])
+              : []
+          setCandidates(arr)
+        } else {
+          setCandidates([])
         }
 
-        setRows(apiRows)
-        setStats({
-          totalCandidates: candidates.length,
-          completed: completed.length,
-          avgScore: Number.isFinite(avgScore) ? avgScore : 0,
-          hireRate: Number.isFinite(hireRate) ? hireRate : 0,
-        })
+        if (intRes.ok) {
+          const raw = (await intRes.json()) as unknown
+          const arr: Interview[] = Array.isArray(raw)
+            ? (raw as Interview[])
+            : Array.isArray((raw as { interviews?: unknown[] } | null)?.interviews)
+              ? ((raw as { interviews: Interview[] }).interviews ?? [])
+              : []
+          setInterviews(arr)
+        } else {
+          setInterviews([])
+        }
+
+        if (jobsRes.ok) {
+          const raw = (await jobsRes.json()) as unknown
+          const arr: JobPosting[] = Array.isArray(raw) ? (raw as JobPosting[]) : []
+          setJobPostings(arr)
+        } else {
+          setJobPostings([])
+        }
       } catch (e) {
-        console.error("Failed to load dashboard data:", e)
-        if (!cancelled) {
-          setRows([])
-          setStats({ totalCandidates: 0, completed: 0, avgScore: 0, hireRate: 0 })
-        }
+        console.error("Failed to fetch HR data:", e)
+        if (cancelled) return
+        setCandidates([])
+        setInterviews([])
+        setJobPostings([])
       } finally {
         if (!cancelled) setLoading(false)
       }
     }
     load()
     return () => { cancelled = true }
-  }, [])
+  }, [activeTab])
 
   useEffect(() => {
     if (activeTab !== "candidates") return
     candidatesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
   }, [activeTab])
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return rows
-    return rows.filter(
-      (r) =>
-        r.name.toLowerCase().includes(q) ||
-        r.email.toLowerCase().includes(q) ||
-        r.role.toLowerCase().includes(q)
-    )
-  }, [rows, query])
+  async function reloadJobs() {
+    try {
+      const raw = (await getJobs({ all: true })) as unknown
+      const arr: JobPosting[] = Array.isArray(raw) ? (raw as JobPosting[]) : []
+      setJobPostings(arr)
+    } catch {
+      setJobPostings([])
+    }
+  }
+
+  async function submitJobForm() {
+    setJobFormError(null)
+    setJobFormSuccess(null)
+    const payload = {
+      company_name: jobForm.company_name.trim(),
+      company_email: jobForm.company_email.trim(),
+      job_title: jobForm.job_title.trim(),
+      job_role: jobForm.job_role,
+      job_description: jobForm.job_description.trim(),
+      requirements: jobForm.requirements.trim() || null,
+      salary_range: jobForm.salary_range.trim() || null,
+      location: jobForm.location.trim() || "Remote",
+      deadline: jobForm.deadline ? jobForm.deadline : null,
+      max_candidates: Number(jobForm.max_candidates) || 50,
+      status: jobForm.status,
+    }
+    if (!payload.company_name || !payload.company_email || !payload.job_title || !payload.job_role || !payload.job_description) {
+      setJobFormError("Please fill all required fields.")
+      return
+    }
+    try {
+      if (editingJobId) {
+        await updateJobPosting(editingJobId, payload)
+        setJobFormSuccess("Job updated.")
+      } else {
+        await createJobPosting(payload as Omit<JobPosting, "id" | "created_at" | "updated_at">)
+        setJobFormSuccess("Job posted.")
+      }
+      setJobFormOpen(false)
+      setEditingJobId(null)
+      await reloadJobs()
+      window.setTimeout(() => setJobFormSuccess(null), 2500)
+    } catch (e) {
+      setJobFormError(e instanceof Error ? e.message : "Failed to save job")
+    }
+  }
 
   // ── Theme ─────────────────────────────────────────────────────────────────
   const sidebarBg  = isDark ? "bg-zinc-950 border-zinc-800"        : "bg-white border-gray-200"
@@ -203,12 +248,77 @@ export default function Dashboard() {
   const inputCls   = isDark ? "bg-zinc-800 border-zinc-700 text-zinc-50 placeholder:text-zinc-500" : "bg-white border-gray-200"
   const theadCls   = isDark ? "text-zinc-400"                       : "text-gray-500"
 
-  const STAT_CARDS = [
-    { label: "Total Candidates",       icon: Users,       value: stats.totalCandidates, suffix: "",   trend: "+12% this month" },
-    { label: "Interviews Completed",   icon: CheckCircle, value: stats.completed,       suffix: "",   trend: "+8% this month"  },
-    { label: "Average Score",          icon: BarChart3,   value: stats.avgScore,        suffix: "/10",trend: "+0.3 improvement" },
-    { label: "Hire Rate",              icon: TrendingUp,  value: stats.hireRate,        suffix: "%",  trend: "Stable"          },
-  ]
+  const stats = useMemo(() => {
+    const totalCandidates = candidates.length
+    const completedInterviews = interviews.filter((i) => i.status === "completed").length
+    const scoredInterviews = interviews.filter((i) => {
+      const s = (i as unknown as { overall_score?: unknown }).overall_score
+      return typeof s === "number" && s > 0
+    })
+    const avgScore =
+      scoredInterviews.length > 0
+        ? scoredInterviews.reduce((sum, i) => sum + ((i as unknown as { overall_score?: number }).overall_score ?? 0), 0) / scoredInterviews.length
+        : null
+    const hireRate =
+      scoredInterviews.length > 0
+        ? Math.round((scoredInterviews.filter((i) => ((i as unknown as { overall_score?: number }).overall_score ?? 0) >= 7.5).length / scoredInterviews.length) * 100)
+        : 0
+    return { totalCandidates, completedInterviews, avgScore, hireRate }
+  }, [candidates, interviews])
+
+  const STAT_CARDS = useMemo(
+    () => [
+      { label: "Total Candidates", icon: Users, value: stats.totalCandidates, suffix: "", footer: "Total" },
+      { label: "Interviews Completed", icon: CheckCircle, value: stats.completedInterviews, suffix: "", footer: "Total" },
+      { label: "Average Score", icon: BarChart3, value: stats.avgScore, suffix: "/10", footer: "Total" },
+      { label: "Hire Rate", icon: TrendingUp, value: stats.hireRate, suffix: "%", footer: "Total" },
+    ],
+    [stats]
+  )
+
+  const tableData = useMemo(() => {
+    const candidateById = new Map(candidates.map((c) => [c.id, c]))
+    const jobById = new Map(jobPostings.map((j) => [j.id, j]))
+    return interviews
+      .slice()
+      .sort((a, b) => (a.created_at < b.created_at ? 1 : -1))
+      .map((interview) => {
+        const candidate = candidateById.get(interview.candidate_id)
+        const rawJobId = (interview as unknown as { job_id?: unknown }).job_id
+        const jobId = typeof rawJobId === "string" ? rawJobId : null
+        const jobTitle = jobId ? jobById.get(jobId)?.job_title : null
+        const rawScore = (interview as unknown as { overall_score?: unknown }).overall_score
+        const score = typeof rawScore === "number" && rawScore > 0 ? rawScore : null
+        const status: CandidateRow["status"] =
+          interview.status === "completed" && score !== null
+            ? "Evaluated"
+            : interview.status === "in_progress"
+              ? "In Progress"
+              : "Pending"
+        return {
+          id: interview.id,
+          name: candidate?.name || "Unknown",
+          email: candidate?.email || "",
+          job: jobTitle || "—",
+          role: interview.job_role || "—",
+          score,
+          status,
+          date: formatDate(interview.created_at),
+        } satisfies CandidateRow
+      })
+  }, [candidates, interviews, jobPostings])
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return tableData
+    return tableData.filter(
+      (r) =>
+        r.name.toLowerCase().includes(q) ||
+        r.email.toLowerCase().includes(q) ||
+        r.job.toLowerCase().includes(q) ||
+        r.role.toLowerCase().includes(q)
+    )
+  }, [query, tableData])
 
   return (
     <div className={["min-h-screen flex", pageBg, textMain].join(" ")}>
@@ -231,6 +341,17 @@ export default function Dashboard() {
           >
             <LayoutDashboard size={16} />
             Dashboard
+          </button>
+          <button
+            type="button"
+            className={[
+              "w-full flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm font-medium transition-colors",
+              activeTab === "jobs" ? activeNav : inactiveNav,
+            ].join(" ")}
+            onClick={() => setActiveTab("jobs")}
+          >
+            <Briefcase size={16} />
+            Job Postings
           </button>
           <button
             type="button"
@@ -291,6 +412,8 @@ export default function Dashboard() {
                 ? "Settings"
                 : activeTab === "pricing"
                   ? "Pricing"
+                  : activeTab === "jobs"
+                    ? "Job Postings"
                   : activeTab === "candidates"
                     ? "Candidates"
                     : "Dashboard"}
@@ -300,6 +423,8 @@ export default function Dashboard() {
                 ? "Account preferences and appearance"
                 : activeTab === "pricing"
                   ? "Enterprise plans for HR teams and organizations"
+                  : activeTab === "jobs"
+                    ? "Create and manage job postings"
                   : "Welcome back, SAGE Admin"}
             </p>
           </div>
@@ -462,10 +587,379 @@ export default function Dashboard() {
               className={isDark ? "text-zinc-50" : "text-gray-900"}
             />
           </div>
+        ) : activeTab === "jobs" ? (
+          <div className="max-w-6xl space-y-6">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <h2 className="text-xl font-semibold">Job Postings</h2>
+                <p className={["text-sm mt-1", textMuted].join(" ")}>Create roles, review applicants, and manage hiring</p>
+              </div>
+              <Button
+                className={isDark ? "bg-[#7C3AED] hover:bg-[#7C3AED]/90 text-white" : "bg-black text-white hover:bg-black/90 border border-black"}
+                onClick={() => {
+                  setJobFormError(null)
+                  setJobFormSuccess(null)
+                  setEditingJobId(null)
+                  setJobForm({
+                    company_name: localStorage.getItem("sage_company") || "SAGE Demo Corp",
+                    company_email: (() => {
+                      try {
+                        const u = JSON.parse(localStorage.getItem("sage_user") ?? "{}") as { email?: string }
+                        return u.email || "admin@sage.ai"
+                      } catch {
+                        return "admin@sage.ai"
+                      }
+                    })(),
+                    job_title: "",
+                    job_role: "Software Engineer",
+                    job_description: "",
+                    requirements: "",
+                    salary_range: "",
+                    location: "Remote",
+                    deadline: "",
+                    max_candidates: 50,
+                    status: "active",
+                  })
+                  setJobFormOpen(true)
+                }}
+              >
+                + Post New Job
+              </Button>
+            </div>
+
+            {jobFormOpen ? (
+              <Card className={["p-6 rounded-xl", cardBg].join(" ")}>
+                <div className="flex items-center justify-between gap-4 flex-wrap">
+                  <div className="font-semibold">{editingJobId ? "Edit Job Posting" : "Post New Job"}</div>
+                  <Button
+                    variant="outline"
+                    className={isDark ? "border-zinc-700 text-white hover:bg-white/10" : "border-gray-300 text-gray-900 hover:bg-gray-50"}
+                    onClick={() => {
+                      setJobFormOpen(false)
+                      setEditingJobId(null)
+                      setJobFormError(null)
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+
+                <div className="mt-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Company Name</Label>
+                    <Input value={jobForm.company_name} onChange={(e) => setJobForm((p) => ({ ...p, company_name: e.target.value }))} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Company Email</Label>
+                    <Input value={jobForm.company_email} onChange={(e) => setJobForm((p) => ({ ...p, company_email: e.target.value }))} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Job Title</Label>
+                    <Input value={jobForm.job_title} onChange={(e) => setJobForm((p) => ({ ...p, job_title: e.target.value }))} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Job Role</Label>
+                    <select
+                      value={jobForm.job_role}
+                      onChange={(e) => setJobForm((p) => ({ ...p, job_role: e.target.value }))}
+                      className={["h-10 w-full rounded-lg border px-3 text-sm outline-none", isDark ? "bg-zinc-800 border-zinc-700 text-zinc-50" : "bg-white border-gray-200 text-gray-900"].join(" ")}
+                    >
+                      {["Software Engineer", "ML Engineer", "Data Analyst", "Product Manager", "Designer"].map((r) => (
+                        <option key={r} value={r}>
+                          {r}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>Job Description</Label>
+                    <textarea
+                      value={jobForm.job_description}
+                      onChange={(e) => setJobForm((p) => ({ ...p, job_description: e.target.value }))}
+                      className={["min-h-[140px] w-full rounded-lg border px-3 py-2 text-sm outline-none", isDark ? "bg-zinc-800 border-zinc-700 text-zinc-50" : "bg-white border-gray-200 text-gray-900"].join(" ")}
+                    />
+                  </div>
+                  <div className="space-y-2 md:col-span-2">
+                    <Label>Requirements</Label>
+                    <textarea
+                      value={jobForm.requirements}
+                      onChange={(e) => setJobForm((p) => ({ ...p, requirements: e.target.value }))}
+                      className={["min-h-[120px] w-full rounded-lg border px-3 py-2 text-sm outline-none", isDark ? "bg-zinc-800 border-zinc-700 text-zinc-50" : "bg-white border-gray-200 text-gray-900"].join(" ")}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Salary Range</Label>
+                    <Input value={jobForm.salary_range} onChange={(e) => setJobForm((p) => ({ ...p, salary_range: e.target.value }))} placeholder="₹8-15 LPA" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Location</Label>
+                    <Input value={jobForm.location} onChange={(e) => setJobForm((p) => ({ ...p, location: e.target.value }))} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Application Deadline</Label>
+                    <Input type="date" value={jobForm.deadline} onChange={(e) => setJobForm((p) => ({ ...p, deadline: e.target.value }))} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Max Candidates</Label>
+                    <Input
+                      type="number"
+                      value={String(jobForm.max_candidates)}
+                      onChange={(e) => setJobForm((p) => ({ ...p, max_candidates: Number(e.target.value) }))}
+                    />
+                  </div>
+                </div>
+
+                {jobFormError ? <div className="mt-4 text-sm text-red-500">{jobFormError}</div> : null}
+                {jobFormSuccess ? <div className="mt-4 text-sm text-green-500">{jobFormSuccess}</div> : null}
+
+                <div className="mt-5 flex items-center justify-end gap-3">
+                  <Button
+                    className={isDark ? "bg-[#7C3AED] hover:bg-[#7C3AED]/90 text-white" : "bg-black text-white hover:bg-black/90 border border-black"}
+                    onClick={() => void submitJobForm()}
+                  >
+                    {editingJobId ? "Save Changes" : "Post Job"}
+                  </Button>
+                </div>
+              </Card>
+            ) : null}
+
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="relative w-80">
+                <Search size={14} className={["absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none", textMuted].join(" ")} />
+                <Input
+                  value={jobsQuery}
+                  onChange={(e) => setJobsQuery(e.target.value)}
+                  placeholder="Search title, role, company…"
+                  className={["pl-9 h-9 text-sm", inputCls].join(" ")}
+                />
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="flex items-center justify-center py-16">
+                <Loader size={28} color={isDark ? "#FFFFFF" : "#0A0A0A"} />
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {(jobsQuery.trim()
+                  ? jobPostings.filter((j) => {
+                      const q = jobsQuery.trim().toLowerCase()
+                      return (
+                        String(j.job_title ?? "").toLowerCase().includes(q) ||
+                        String(j.job_role ?? "").toLowerCase().includes(q) ||
+                        String(j.company_name ?? "").toLowerCase().includes(q)
+                      )
+                    })
+                  : jobPostings
+                ).length === 0 ? (
+                  <Card className={["p-6 rounded-xl", cardBg].join(" ")}>
+                    <div className={["text-sm", textMuted].join(" ")}>No job postings yet.</div>
+                  </Card>
+                ) : (
+                  (jobsQuery.trim()
+                    ? jobPostings.filter((j) => {
+                        const q = jobsQuery.trim().toLowerCase()
+                        return (
+                          String(j.job_title ?? "").toLowerCase().includes(q) ||
+                          String(j.job_role ?? "").toLowerCase().includes(q) ||
+                          String(j.company_name ?? "").toLowerCase().includes(q)
+                        )
+                      })
+                    : jobPostings
+                  ).map((job) => {
+                    const applicants = interviews.filter((iv) => String((iv as unknown as { job_id?: unknown }).job_id ?? "") === job.id).length
+                    const status = String(job.status ?? "active")
+                    const statusCls =
+                      status === "closed"
+                        ? isDark
+                          ? "bg-zinc-800 text-zinc-200 border-zinc-700"
+                          : "bg-gray-100 text-gray-700 border-gray-200"
+                        : isDark
+                          ? "bg-green-500/15 text-green-300 border-green-500/25"
+                          : "bg-green-100 text-green-700 border-green-200"
+                    return (
+                      <Card key={job.id} className={["p-6 rounded-xl", cardBg].join(" ")}>
+                        <div className="flex items-start justify-between gap-4 flex-wrap">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <div className="text-lg font-semibold">{job.job_title}</div>
+                              <Badge variant="outline" className={statusCls}>
+                                {status}
+                              </Badge>
+                            </div>
+                            <div className={["text-sm mt-1", textMuted].join(" ")}>
+                              {job.company_name} · {job.location || "Remote"} · {job.job_role}
+                            </div>
+                            <div className={["text-sm mt-2", textMuted].join(" ")}>
+                              Applicants: <span className={textMain}>{applicants}</span>
+                              {job.deadline ? (
+                                <>
+                                  {" "}
+                                  · Deadline: <span className={textMain}>{new Date(job.deadline).toLocaleDateString()}</span>
+                                </>
+                              ) : null}
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className={isDark ? "border-zinc-700 text-white hover:bg-white/10" : "border-gray-300 text-gray-900 hover:bg-gray-50"}
+                              onClick={() => {
+                                setJobFormError(null)
+                                setJobFormSuccess(null)
+                                setEditingJobId(job.id)
+                                setJobForm({
+                                  company_name: job.company_name,
+                                  company_email: job.company_email,
+                                  job_title: job.job_title,
+                                  job_role: job.job_role,
+                                  job_description: job.job_description,
+                                  requirements: job.requirements ?? "",
+                                  salary_range: job.salary_range ?? "",
+                                  location: job.location ?? "Remote",
+                                  deadline: job.deadline ?? "",
+                                  max_candidates: job.max_candidates ?? 50,
+                                  status: job.status ?? "active",
+                                })
+                                setJobFormOpen(true)
+                              }}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className={isDark ? "border-zinc-700 text-white hover:bg-white/10" : "border-gray-300 text-gray-900 hover:bg-gray-50"}
+                              disabled={status === "closed"}
+                              onClick={() =>
+                                void (async () => {
+                                  await updateJobPosting(job.id, { status: "closed" })
+                                  await reloadJobs()
+                                })()
+                              }
+                            >
+                              Close Posting
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() =>
+                                void (async () => {
+                                  await deleteJobPosting(job.id)
+                                  await reloadJobs()
+                                })()
+                              }
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                        </div>
+                      </Card>
+                    )
+                  })
+                )}
+              </div>
+            )}
+          </div>
+        ) : activeTab === "candidates" ? (
+          <Card
+            ref={candidatesRef}
+            className={[
+              "rounded-xl overflow-hidden scroll-mt-24",
+              isDark ? "ring-2 ring-purple-500/40" : "ring-2 ring-blue-500/30",
+              cardBg,
+            ].join(" ")}
+          >
+            <div className="p-6 pb-4 flex items-center justify-between gap-4 flex-wrap">
+              <h2 className="text-base font-semibold">Candidates</h2>
+              <div className="relative w-72">
+                <Search size={14} className={["absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none", textMuted].join(" ")} />
+                <Input
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search name, email, role…"
+                  className={["pl-9 h-9 text-sm", inputCls].join(" ")}
+                />
+              </div>
+            </div>
+
+            <Table>
+              <TableHeader>
+                <TableRow className={["border-b", borderRow].join(" ")}>
+                  {["Name", "Job", "Role Applied", "Score", "Status", "Date", "Action"].map((h) => (
+                    <TableHead key={h} className={["text-xs uppercase tracking-wide font-medium", theadCls].join(" ")}>
+                      {h}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-14">
+                      <div className="flex items-center justify-center">
+                        <Loader size={28} color={isDark ? "#FFFFFF" : "#0A0A0A"} />
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : filtered.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="py-14 text-center">
+                      {query.trim() ? (
+                        <p className={["text-sm", textMuted].join(" ")}>No candidates match "{query}"</p>
+                      ) : (
+                        <p className={["text-sm", textMuted].join(" ")}>No candidates yet. Candidates will appear here after they complete assessments.</p>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filtered.map((r) => (
+                    <TableRow key={r.id} className={["border-b transition-colors", borderRow, rowHover].join(" ")}>
+                      <TableCell>
+                        <div className="font-semibold text-sm">{r.name}</div>
+                        <div className={["text-xs", textMuted].join(" ")}>{r.email}</div>
+                      </TableCell>
+                      <TableCell className={["text-sm", textMuted].join(" ")}>{r.job}</TableCell>
+                      <TableCell className="text-sm">{r.role}</TableCell>
+                      <TableCell>
+                        {r.score !== null ? (
+                          <span className={["font-semibold tabular-nums text-sm", scoreColor(r.score)].join(" ")}>
+                            {r.score.toFixed(1)}
+                            <span className={["text-xs ml-0.5", textMuted].join(" ")}>/10</span>
+                          </span>
+                        ) : (
+                          <span className={textMuted}>—</span>
+                        )}
+                      </TableCell>
+                      <TableCell><StatusBadge status={r.status} /></TableCell>
+                      <TableCell className={["text-sm", textMuted].join(" ")}>{r.date}</TableCell>
+                      <TableCell>
+                        {r.status === "Evaluated" ? (
+                          <Button asChild size="sm" className={isDark ? "bg-[#7C3AED] hover:bg-[#7C3AED]/90 text-white" : "bg-black text-white hover:bg-black/90"}>
+                            <Link to={`/hr/report/${r.id}`}>View Report</Link>
+                          </Button>
+                        ) : (
+                          <Button size="sm" variant="outline" disabled className={isDark ? "border-zinc-700 text-zinc-500" : ""}>
+                            View Report
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+
+            <div className={["px-6 py-3 text-xs border-t", textMuted, borderRow].join(" ")}>
+              {filtered.length} of {tableData.length} candidate{tableData.length !== 1 ? "s" : ""}
+            </div>
+          </Card>
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
-              {STAT_CARDS.map(({ label, icon: Icon, value, suffix, trend }) => (
+              {STAT_CARDS.map(({ label, icon: Icon, value, suffix, footer }) => (
                 <Card key={label} className={["rounded-xl p-6", cardBg].join(" ")}>
                   <div className="flex items-center justify-between mb-4">
                     <p className={["text-sm font-medium", textMuted].join(" ")}>{label}</p>
@@ -477,10 +971,12 @@ export default function Dashboard() {
                     <div className="h-9 flex items-center">
                       <Loader size={22} color={isDark ? "#FFFFFF" : "#0A0A0A"} />
                     </div>
+                  ) : value === null ? (
+                    <div className={["text-3xl font-bold tabular-nums", textMuted].join(" ")}>—</div>
                   ) : (
                     <CountUp to={value} suffix={suffix} className="text-3xl font-bold tabular-nums" />
                   )}
-                  <p className="text-green-400 text-xs mt-2">{trend}</p>
+                  <p className={["text-xs mt-2", textMuted].join(" ")}>{footer}</p>
                 </Card>
               ))}
             </div>
@@ -489,7 +985,6 @@ export default function Dashboard() {
               ref={candidatesRef}
               className={[
                 "rounded-xl overflow-hidden scroll-mt-24",
-                activeTab === "candidates" ? (isDark ? "ring-2 ring-purple-500/40" : "ring-2 ring-blue-500/30") : "",
                 cardBg,
               ].join(" ")}
             >
@@ -519,7 +1014,7 @@ export default function Dashboard() {
                 <TableBody>
                   {loading ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="py-14">
+                      <TableCell colSpan={7} className="py-14">
                         <div className="flex items-center justify-center">
                           <Loader size={28} color={isDark ? "#FFFFFF" : "#0A0A0A"} />
                         </div>
@@ -527,8 +1022,12 @@ export default function Dashboard() {
                     </TableRow>
                   ) : filtered.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="py-14 text-center">
-                        <p className={["text-sm", textMuted].join(" ")}>No candidates match "{query}"</p>
+                      <TableCell colSpan={7} className="py-14 text-center">
+                        {query.trim() ? (
+                          <p className={["text-sm", textMuted].join(" ")}>No candidates match "{query}"</p>
+                        ) : (
+                          <p className={["text-sm", textMuted].join(" ")}>No candidates yet. Candidates will appear here after they complete assessments.</p>
+                        )}
                       </TableCell>
                     </TableRow>
                   ) : (
@@ -538,6 +1037,7 @@ export default function Dashboard() {
                           <div className="font-semibold text-sm">{r.name}</div>
                           <div className={["text-xs", textMuted].join(" ")}>{r.email}</div>
                         </TableCell>
+                        <TableCell className={["text-sm", textMuted].join(" ")}>{r.job}</TableCell>
                         <TableCell className="text-sm">{r.role}</TableCell>
                         <TableCell>
                           {r.score !== null ? (
@@ -569,7 +1069,7 @@ export default function Dashboard() {
               </Table>
 
               <div className={["px-6 py-3 text-xs border-t", textMuted, borderRow].join(" ")}>
-                {filtered.length} of {rows.length} candidate{rows.length !== 1 ? "s" : ""}
+                {filtered.length} of {tableData.length} candidate{tableData.length !== 1 ? "s" : ""}
               </div>
             </Card>
           </>
