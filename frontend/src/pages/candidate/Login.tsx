@@ -42,6 +42,7 @@ export default function Login() {
       localStorage.setItem("sage_token", result.token)
       localStorage.setItem("sage_candidate", JSON.stringify(result.candidate))
       localStorage.setItem("sage_role", "candidate")
+      if (result?.candidate?.id) localStorage.setItem("sage_candidate_id", String(result.candidate.id))
       navigate("/dashboard")
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed")

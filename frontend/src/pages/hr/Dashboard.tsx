@@ -15,7 +15,6 @@ import {
   Users,
 } from "lucide-react"
 
-import CountUp from "@/components/CountUp"
 import Loader from "@/components/Loader"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -976,7 +975,10 @@ export default function Dashboard() {
                   ) : value === null ? (
                     <div className={["text-3xl font-bold tabular-nums", textMuted].join(" ")}>—</div>
                   ) : (
-                    <CountUp to={value} suffix={suffix} className="text-3xl font-bold tabular-nums" />
+                    <div className="text-3xl font-bold tabular-nums">
+                      {suffix === "/10" ? value.toFixed(1) : String(value)}
+                      {suffix}
+                    </div>
                   )}
                   <p className={["text-xs mt-2", textMuted].join(" ")}>{footer}</p>
                 </Card>

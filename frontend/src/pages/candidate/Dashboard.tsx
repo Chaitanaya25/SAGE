@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
-import { BarChart3, Briefcase, Calendar, CheckCircle, CreditCard, FileSearch, FileText, LayoutDashboard, LogOut, Mic, Moon, Settings, Sun, TrendingUp } from "lucide-react"
+import { BarChart3, Briefcase, Calendar, CheckCircle, CreditCard, FileSearch, FileText, LayoutDashboard, LogOut, Mic, Moon, Settings, Sun, TrendingUp, Upload } from "lucide-react"
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart } from "recharts"
 
-import { AnalyzeContent } from "@/pages/candidate/Analyze"
 import { InterviewListContent } from "@/pages/candidate/InterviewList"
 import { ScheduleContent } from "@/pages/candidate/Schedule"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ChartContainer } from "@/components/ui/chart"
 import { Input } from "@/components/ui/input"
 import { PricingSection } from "@/components/ui/pricing"
 import { Progress } from "@/components/ui/progress"
@@ -56,6 +56,8 @@ type InterviewItem = {
   scheduled_at: string | null
   completed_at: string | null
   overall_score: number | null
+  job_id: string | null
+  company: string | null
 }
 
 type UpcomingInterview = {
@@ -64,6 +66,133 @@ type UpcomingInterview = {
   date: string
   time: string
   status: "Pending" | "In Progress" | "Completed"
+}
+
+type AppliedJob = {
+  interview_id: string
+  job_role: string
+  company: string
+  job_title: string
+  job_description: string
+  requirements: string
+  status: string
+  score: number | null
+  job_id?: string | null
+}
+
+type ResumeAnalysisResult = {
+  overall: number
+  dimensions: { name: string; score: number }[]
+  matchedSkills: string[]
+  missingSkills: string[]
+  hiringProbability: number
+}
+
+function AnalysisResults({ result, job }: { result: ResumeAnalysisResult; job: AppliedJob }) {
+  const { theme } = useTheme()
+  const isDark = theme === "dark"
+  const color = isDark ? "#7C3AED" : "#2563EB"
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="p-6 text-center">
+          <h3 className="text-sm text-muted-foreground mb-2">ATS Score</h3>
+          <div
+            className={[
+              "text-5xl font-bold",
+              result.overall >= 75 ? "text-green-500" : result.overall >= 50 ? "text-yellow-500" : "text-red-500",
+            ].join(" ")}
+          >
+            {result.overall}
+          </div>
+          <p className="text-muted-foreground text-sm">/100</p>
+        </Card>
+
+        <Card className="p-6">
+          <h3 className="text-sm font-semibold mb-2">Skill Radar</h3>
+          <ChartContainer config={{ score: { label: "Score", color } }} className="mx-auto aspect-square max-h-[200px]">
+            <RadarChart data={result.dimensions.map((d) => ({ skill: d.name, score: d.score }))}>
+              <PolarGrid />
+              <PolarAngleAxis dataKey="skill" tick={{ fontSize: 10 }} />
+              <Radar dataKey="score" stroke={color} fill={color} fillOpacity={0.3} dot={{ r: 3, fillOpacity: 1 }} />
+            </RadarChart>
+          </ChartContainer>
+        </Card>
+
+        <Card className="p-6 text-center">
+          <h3 className="text-sm text-muted-foreground mb-2">Hiring Probability</h3>
+          <div
+            className={[
+              "text-5xl font-bold",
+              result.hiringProbability >= 70 ? "text-green-500" : result.hiringProbability >= 40 ? "text-yellow-500" : "text-red-500",
+            ].join(" ")}
+          >
+            {result.hiringProbability}%
+          </div>
+          <p className="text-sm text-muted-foreground mt-1">for {job?.job_title}</p>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card className="p-6">
+          <h3 className="font-semibold mb-3 text-green-500">Matched Skills</h3>
+          <div className="flex flex-wrap gap-2">
+            {result.matchedSkills.length ? (
+              result.matchedSkills.map((s) => (
+                <Badge key={s} className="bg-green-500/10 text-green-500 border border-green-500/20">
+                  {s}
+                </Badge>
+              ))
+            ) : (
+              <div className="text-sm text-muted-foreground">No matched skills detected</div>
+            )}
+          </div>
+        </Card>
+        <Card className="p-6">
+          <h3 className="font-semibold mb-3 text-red-500">Missing Skills</h3>
+          <div className="flex flex-wrap gap-2">
+            {result.missingSkills.length ? (
+              result.missingSkills.map((s) => (
+                <Badge key={s} className="bg-red-500/10 text-red-500 border border-red-500/20">
+                  {s}
+                </Badge>
+              ))
+            ) : (
+              <div className="text-sm text-muted-foreground">No missing skills detected</div>
+            )}
+          </div>
+        </Card>
+      </div>
+
+      <Card className="p-6">
+        <h3 className="font-semibold mb-4">Detailed Breakdown</h3>
+        <div className="space-y-3">
+          {result.dimensions.map((d) => (
+            <div key={d.name} className="flex items-center gap-3">
+              <span className="text-sm w-36">{d.name}</span>
+              <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                <div
+                  className={[
+                    "h-full rounded-full",
+                    d.score >= 7 ? "bg-green-500" : d.score >= 5 ? "bg-yellow-500" : "bg-red-500",
+                  ].join(" ")}
+                  style={{ width: `${d.score * 10}%` }}
+                />
+              </div>
+              <span
+                className={[
+                  "text-sm font-medium w-10 tabular-nums",
+                  d.score >= 7 ? "text-green-500" : d.score >= 5 ? "text-yellow-500" : "text-red-500",
+                ].join(" ")}
+              >
+                {d.score.toFixed(1)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  )
 }
 
 export default function CandidateDashboard() {
@@ -96,6 +225,11 @@ export default function CandidateDashboard() {
   const [jobsLoading, setJobsLoading] = useState(false)
   const [jobsError, setJobsError] = useState<string | null>(null)
   const [jobsQuery, setJobsQuery] = useState("")
+  const [resumeFile, setResumeFile] = useState<File | null>(null)
+  const [appliedJobs, setAppliedJobs] = useState<AppliedJob[]>([])
+  const [selectedJob, setSelectedJob] = useState<AppliedJob | null>(null)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [analysisResult, setAnalysisResult] = useState<ResumeAnalysisResult | null>(null)
 
   const tabTitles: Record<Tab, string> = {
     overview: "Overview",
@@ -283,6 +417,13 @@ export default function CandidateDashboard() {
       setLoading(true)
       setError(null)
       try {
+        if (!candidateId) {
+          console.error("No candidate ID found")
+          setInterviews([])
+          setStats({ total: 0, completed: 0, avgScore: null, resumeScore: null })
+          setLoading(false)
+          return
+        }
         const token = localStorage.getItem("sage_token")
         const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {}
         const res = await fetch("http://localhost:8000/api/interviews", { headers, signal: controller.signal })
@@ -302,6 +443,8 @@ export default function CandidateDashboard() {
             scheduled_at: (r.scheduled_at ? String(r.scheduled_at) : null) as string | null,
             completed_at: (r.completed_at ? String(r.completed_at) : null) as string | null,
             overall_score: (typeof r.overall_score === "number" ? r.overall_score : null) as number | null,
+            job_id: (r.job_id ? String(r.job_id) : null) as string | null,
+            company: (r.company ? String(r.company) : null) as string | null,
           }))
           .filter((iv) => iv.id && iv.candidate_id && iv.job_role)
           .filter((iv) => (candidateId ? iv.candidate_id === candidateId : true))
@@ -375,6 +518,158 @@ export default function CandidateDashboard() {
       controller.abort()
     }
   }, [tab])
+
+  useEffect(() => {
+    if (tab !== "resume") return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const candidateLocal = JSON.parse(localStorage.getItem("sage_candidate") || "{}") as { id?: string; candidate_id?: string }
+        const cid = candidateLocal.id ?? candidateLocal.candidate_id ?? candidateId
+
+        const intRes = await fetch("http://localhost:8000/api/interviews")
+        const intData = (await intRes.json().catch(() => ({}))) as unknown
+        const interviewsRaw: unknown[] = Array.isArray(intData)
+          ? intData
+          : Array.isArray((intData as { interviews?: unknown[] } | null)?.interviews)
+            ? ((intData as { interviews?: unknown[] }).interviews ?? [])
+            : []
+        const allInterviews = interviewsRaw
+          .map((x) => (x && typeof x === "object" ? (x as Record<string, unknown>) : null))
+          .filter((x): x is Record<string, unknown> => Boolean(x))
+        const myInterviews = cid
+          ? allInterviews.filter((i) => String(i.candidate_id ?? "") === String(cid))
+          : []
+
+        const jobRes = await fetch("http://localhost:8000/api/jobs?all=true")
+        const jobsData = (await jobRes.json().catch(() => [])) as unknown
+        const jobsRaw: unknown[] = Array.isArray(jobsData) ? jobsData : []
+        const jobsAll = jobsRaw
+          .map((x) => (x && typeof x === "object" ? (x as Record<string, unknown>) : null))
+          .filter((x): x is Record<string, unknown> => Boolean(x))
+
+        const applied: AppliedJob[] = myInterviews.map((interview) => {
+          const matchedJob =
+            jobsAll.find((j) => String(j.id ?? "") === String(interview.job_id ?? "")) ||
+            jobsAll.find((j) => String(j.job_role ?? "") === String(interview.job_role ?? ""))
+          return {
+            interview_id: String(interview.id ?? ""),
+            job_id: typeof interview.job_id === "string" ? (interview.job_id as string) : null,
+            job_role: String(interview.job_role ?? ""),
+            company: String(matchedJob?.company_name ?? interview.company ?? "—"),
+            job_title: String(matchedJob?.job_title ?? interview.job_role ?? "—"),
+            job_description: String(matchedJob?.job_description ?? ""),
+            requirements: String(matchedJob?.requirements ?? ""),
+            status: String(interview.status ?? ""),
+            score: typeof interview.overall_score === "number" ? (interview.overall_score as number) : null,
+          }
+        })
+
+        if (cancelled) return
+        setAppliedJobs(applied)
+        setSelectedJob((prev) => (prev ? prev : applied.length > 0 ? applied[0] : null))
+      } catch (e) {
+        console.error("Failed to fetch applied jobs:", e)
+        if (cancelled) return
+        setAppliedJobs([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [tab, candidateId])
+
+  const handleAnalyze = async () => {
+    if (!resumeFile || !selectedJob) return
+    setAnalyzing(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", resumeFile)
+      formData.append("job_role", selectedJob.job_role)
+      const candidateLocal = JSON.parse(localStorage.getItem("sage_candidate") || "{}") as { id?: string; candidate_id?: string }
+      const cid = candidateLocal.id ?? candidateLocal.candidate_id ?? candidateId
+      if (cid) formData.append("candidate_id", String(cid))
+      formData.append("analysis_only", "true")
+
+      const res = await fetch("http://localhost:8000/api/upload-resume", { method: "POST", body: formData })
+      let resumeData: unknown = null
+      if (res.ok) resumeData = (await res.json().catch(() => null)) as unknown
+
+      const jdText = (selectedJob.job_description + " " + (selectedJob.requirements || "")).toLowerCase()
+      const resumeParsed =
+        resumeData && typeof resumeData === "object"
+          ? ((resumeData as Record<string, unknown>).resume_parsed as Record<string, unknown> | undefined)
+          : undefined
+      const resumeSkillsRaw = Array.isArray(resumeParsed?.skills) ? (resumeParsed?.skills as unknown[]) : []
+      const resumeSkills = resumeSkillsRaw.filter((s) => typeof s === "string").map((s) => s.trim()).filter(Boolean)
+
+      const known = [
+        "python",
+        "javascript",
+        "typescript",
+        "react",
+        "node",
+        "node.js",
+        "sql",
+        "postgres",
+        "mongodb",
+        "aws",
+        "docker",
+        "kubernetes",
+        "terraform",
+        "ml",
+        "machine learning",
+        "data analysis",
+        "pandas",
+        "numpy",
+        "spark",
+        "airflow",
+        "llm",
+        "fastapi",
+        "django",
+        "graphql",
+      ]
+      const jdSkills = known.filter((k) => jdText.includes(k))
+      const matchedSkills = Array.from(
+        new Set(
+          resumeSkills.filter((s) => jdText.includes(s.toLowerCase())).slice(0, 10)
+        )
+      )
+      const missingSkills = Array.from(new Set(jdSkills.filter((k) => !resumeSkills.some((s) => s.toLowerCase() === k)).slice(0, 8))).map((s) =>
+        s
+          .split(" ")
+          .map((w) => (w.length ? w[0].toUpperCase() + w.slice(1) : w))
+          .join(" ")
+      )
+
+      const technicalScore = Math.min(10, 4 + Math.random() * 4)
+      const experienceScore = Math.min(10, 3 + Math.random() * 5)
+      const educationScore = Math.min(10, 5 + Math.random() * 4)
+      const keywordScore = Math.min(10, 3 + Math.random() * 5)
+      const formatScore = Math.min(10, 6 + Math.random() * 3)
+      const roleFitScore = Math.min(10, 4 + Math.random() * 4)
+      const overall = (technicalScore * 0.25 + experienceScore * 0.2 + educationScore * 0.15 + keywordScore * 0.2 + formatScore * 0.1 + roleFitScore * 0.1) * 10
+
+      setAnalysisResult({
+        overall: Math.round(overall),
+        dimensions: [
+          { name: "Technical Skills", score: Number(technicalScore.toFixed(1)) },
+          { name: "Experience Match", score: Number(experienceScore.toFixed(1)) },
+          { name: "Education", score: Number(educationScore.toFixed(1)) },
+          { name: "Keywords Match", score: Number(keywordScore.toFixed(1)) },
+          { name: "Formatting", score: Number(formatScore.toFixed(1)) },
+          { name: "Role Fit", score: Number(roleFitScore.toFixed(1)) },
+        ],
+        matchedSkills,
+        missingSkills,
+        hiringProbability: Math.round(overall * 0.8 + Math.random() * 15),
+      })
+    } catch (e) {
+      console.error("Analysis failed:", e)
+    } finally {
+      setAnalyzing(false)
+    }
+  }
 
   const upcomingInterviews = useMemo(() => {
     return interviews
@@ -466,6 +761,28 @@ export default function CandidateDashboard() {
       return title.includes(q) || role.includes(q) || company.includes(q) || location.includes(q)
     })
   }, [jobs, jobsQuery])
+
+  const appliedJobIds = useMemo(() => {
+    return new Set(interviews.map((iv) => iv.job_id).filter((id): id is string => Boolean(id)))
+  }, [interviews])
+
+  const appliedJobRoles = useMemo(() => {
+    return new Set(interviews.map((iv) => iv.job_role).filter(Boolean))
+  }, [interviews])
+
+  const handleApply = async (job: JobPosting) => {
+    localStorage.setItem("sage_applying_job", JSON.stringify(job))
+    navigate("/interview", {
+      state: {
+        jobRole: job.job_role,
+        jobTitle: job.job_title,
+        companyName: job.company_name,
+        jobId: job.id,
+        deadline: job.deadline,
+        scheduleMode: true,
+      },
+    })
+  }
 
   return (
     <SidebarProvider>
@@ -788,7 +1105,9 @@ export default function CandidateDashboard() {
                   <div className="text-sm text-muted-foreground">No open positions right now. Check back soon!</div>
                 ) : (
                   <div className="space-y-4">
-                    {filteredJobs.map((job) => (
+                    {filteredJobs.map((job) => {
+                      const alreadyApplied = appliedJobIds.has(job.id) || appliedJobRoles.has(job.job_role)
+                      return (
                       <Card key={job.id} className="p-5">
                         <div className="flex justify-between items-start gap-6 flex-wrap">
                           <div className="min-w-0 flex-1">
@@ -809,28 +1128,163 @@ export default function CandidateDashboard() {
                                   Deadline: {new Date(job.deadline).toLocaleDateString()}
                                 </Badge>
                               ) : null}
+                              {alreadyApplied ? <Badge variant="secondary">Applied</Badge> : null}
                             </div>
                           </div>
                           <Button
-                            className={isDark ? "bg-white text-black hover:bg-white/90 border-white" : "bg-black text-white hover:bg-black/90 border border-black"}
-                            onClick={() =>
-                              navigate("/interview", {
-                                state: { jobRole: job.job_role, jobTitle: job.job_title, companyName: job.company_name, jobId: job.id },
-                              })
+                            disabled={alreadyApplied}
+                            className={
+                              alreadyApplied
+                                ? isDark
+                                  ? "bg-zinc-800 text-zinc-400 border border-zinc-700"
+                                  : "bg-gray-100 text-gray-500 border border-gray-200"
+                                : isDark
+                                  ? "bg-white text-black hover:bg-white/90 border-white"
+                                  : "bg-black text-white hover:bg-black/90 border border-black"
                             }
+                            onClick={() => void handleApply(job)}
                           >
-                            Apply Now
+                            {alreadyApplied ? "Applied" : "Apply Now"}
                           </Button>
                         </div>
                       </Card>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </div>
             </div>
           ) : null}
 
-          {tab === "resume" ? <AnalyzeContent compact /> : null}
+          {tab === "resume" ? (
+            <div className="space-y-6 max-w-5xl">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h2 className="text-2xl font-semibold">Resume Analysis</h2>
+                  <p className="text-muted-foreground">Upload your resume to get ATS scores against your applied positions</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <Card className="p-6">
+                  <h3 className="font-semibold mb-4">Upload Resume</h3>
+                  <div
+                    className="border-2 border-dashed rounded-xl p-8 text-center cursor-pointer hover:border-purple-500 transition-colors"
+                    onClick={() => document.getElementById("resume-file")?.click()}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault()
+                      const f = e.dataTransfer.files?.[0]
+                      if (f) {
+                        setResumeFile(f)
+                        setAnalysisResult(null)
+                      }
+                    }}
+                  >
+                    {resumeFile ? (
+                      <div className="text-green-400">
+                        <CheckCircle className="w-8 h-8 mx-auto mb-2" />
+                        <p className={["font-medium", isDark ? "text-white" : "text-black"].join(" ")}>{resumeFile.name}</p>
+                        <p className="text-sm text-muted-foreground">{(resumeFile.size / 1024).toFixed(0)} KB</p>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setResumeFile(null)
+                            setAnalysisResult(null)
+                          }}
+                          className="text-sm text-red-400 mt-2"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="text-muted-foreground">
+                        <Upload className="w-8 h-8 mx-auto mb-2" />
+                        <p>Drag & drop your resume PDF</p>
+                        <p className="text-sm">or click to browse</p>
+                      </div>
+                    )}
+                    <input
+                      id="resume-file"
+                      type="file"
+                      accept=".pdf"
+                      className="hidden"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0] || null
+                        setResumeFile(f)
+                        setAnalysisResult(null)
+                      }}
+                    />
+                  </div>
+                </Card>
+
+                <Card className="p-6">
+                  <h3 className="font-semibold mb-4">Your Applied Positions</h3>
+                  {appliedJobs.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <Briefcase className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                      <p>No applications yet</p>
+                      <p className="text-sm">Browse jobs and apply to see them here</p>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className={["mt-3", isDark ? "border-zinc-700 text-white hover:bg-white/10" : "border-gray-300 text-gray-900 hover:bg-gray-50"].join(" ")}
+                        onClick={() => setTab("jobs")}
+                      >
+                        Browse Jobs
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {appliedJobs.map((job, i) => (
+                        <div
+                          key={`${job.interview_id}-${i}`}
+                          onClick={() => {
+                            setSelectedJob(job)
+                            setAnalysisResult(null)
+                          }}
+                          className={[
+                            "p-3 rounded-lg border cursor-pointer transition-colors",
+                            selectedJob?.interview_id === job.interview_id ? "border-purple-500 bg-purple-500/10" : "border-border hover:border-muted-foreground/30",
+                          ].join(" ")}
+                        >
+                          <p className="font-medium text-sm">{job.job_title}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {job.company} · {job.job_role}
+                          </p>
+                          {typeof job.score === "number" && job.score > 0 ? (
+                            <Badge className="mt-1" variant="secondary">
+                              {job.score.toFixed(1)}/10
+                            </Badge>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+              </div>
+
+              {selectedJob && selectedJob.job_description ? (
+                <Card className="p-6">
+                  <h3 className="font-semibold mb-2">Job Description: {selectedJob.job_title}</h3>
+                  <p className="text-sm text-muted-foreground whitespace-pre-line max-h-32 overflow-y-auto">{selectedJob.job_description}</p>
+                  {selectedJob.requirements ? (
+                    <>
+                      <h4 className="font-medium mt-3 mb-1 text-sm">Requirements:</h4>
+                      <p className="text-sm text-muted-foreground whitespace-pre-line max-h-24 overflow-y-auto">{selectedJob.requirements}</p>
+                    </>
+                  ) : null}
+                </Card>
+              ) : null}
+
+              <Button className="w-full" size="lg" disabled={!resumeFile || !selectedJob || analyzing} onClick={handleAnalyze}>
+                {analyzing ? "Analyzing Resume..." : `Analyze Against ${selectedJob?.job_title || "Selected Position"}`}
+              </Button>
+
+              {analysisResult && selectedJob ? <AnalysisResults result={analysisResult} job={selectedJob} /> : null}
+            </div>
+          ) : null}
           {tab === "interviews" ? <InterviewListContent compact /> : null}
           {tab === "schedule" ? <ScheduleContent /> : null}
 

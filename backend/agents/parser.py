@@ -55,15 +55,18 @@ Return ONLY valid JSON:
     content = response.choices[0].message.content or "{}"
     parsed: Dict[str, Any] = json.loads(content)
 
-    await update_candidate(
-        candidate_id,
-        {
-            "resume_parsed": parsed,
-            "name": parsed.get("name", "") or "",
-            "email": parsed.get("email", "") or "",
-            "phone": parsed.get("phone", "") or "",
-        },
-    )
+    update_payload: Dict[str, Any] = {"resume_parsed": parsed}
+    name = parsed.get("name")
+    email = parsed.get("email")
+    phone = parsed.get("phone")
+    if isinstance(name, str) and name.strip():
+        update_payload["name"] = name.strip()
+    if isinstance(email, str) and email.strip():
+        update_payload["email"] = email.strip()
+    if isinstance(phone, str) and phone.strip():
+        update_payload["phone"] = phone.strip()
+
+    await update_candidate(candidate_id, update_payload)
 
     logger.info("Resume parsed for candidate %s", candidate_id)
     return parsed

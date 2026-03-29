@@ -35,7 +35,16 @@ interface Interview {
   job_role: string
   status: "pending" | "in_progress" | "completed" | "interrupted"
   created_at: string
+  scheduled_at?: string | null
   overall_score: number | null
+}
+
+function isInterviewReady(interview: Interview) {
+  if (!interview.scheduled_at) return true
+  const scheduled = new Date(interview.scheduled_at)
+  const now = new Date()
+  const diffMinutes = (scheduled.getTime() - now.getTime()) / (1000 * 60)
+  return diffMinutes <= 15 && diffMinutes >= -60
 }
 
 function StatusBadge({ status }: { status: Interview["status"] }) {
@@ -153,9 +162,9 @@ function InterviewListInner({ compact = false }: { compact?: boolean }) {
           )}
         </button>
       ),
-      cell: ({ getValue }) => (
+      cell: ({ getValue, row }) => (
         <span className={isDark ? "text-zinc-400" : "text-gray-500"}>
-          {new Date(getValue() as string).toLocaleDateString("en-US", {
+          {new Date((row.original.scheduled_at ?? (getValue() as string)) as string).toLocaleDateString("en-US", {
             year: "numeric",
             month: "short",
             day: "numeric",
@@ -194,7 +203,7 @@ function InterviewListInner({ compact = false }: { compact?: boolean }) {
       id: "actions",
       header: () => <span className="font-medium">Action</span>,
       cell: ({ row }) => {
-        const { id, candidate_id, job_role, status } = row.original
+        const { id, candidate_id, job_role, status, scheduled_at } = row.original
         if (status === "completed") {
           return (
             <Button
@@ -208,13 +217,25 @@ function InterviewListInner({ compact = false }: { compact?: boolean }) {
             </Button>
           )
         }
-        return (
+        return isInterviewReady(row.original) ? (
           <Button
             size="sm"
             className={isDark ? "bg-[#7C3AED] hover:bg-[#7C3AED]/90 text-white" : "bg-black text-white hover:bg-black/90"}
-            onClick={() =>
-              navigate("/interview", { state: { candidateId: candidate_id, interviewId: id, jobRole: job_role } })
-            }
+            onClick={() => navigate("/interview", { state: { candidateId: candidate_id, interviewId: id, jobRole: job_role } })}
+          >
+            <Mic size={14} className="mr-1.5" />
+            Start Interview
+          </Button>
+        ) : scheduled_at ? (
+          <span className="text-sm text-muted-foreground">
+            Scheduled: {new Date(scheduled_at).toLocaleDateString()}{" "}
+            {new Date(scheduled_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+          </span>
+        ) : (
+          <Button
+            size="sm"
+            className={isDark ? "bg-[#7C3AED] hover:bg-[#7C3AED]/90 text-white" : "bg-black text-white hover:bg-black/90"}
+            onClick={() => navigate("/interview", { state: { candidateId: candidate_id, interviewId: id, jobRole: job_role } })}
           >
             <Mic size={14} className="mr-1.5" />
             Start Interview

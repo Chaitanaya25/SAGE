@@ -13,7 +13,7 @@ import type { WebSocketMessage } from "@/types"
 
 type InterviewUiState = "connecting" | "idle" | "recording" | "processing" | "ai_speaking" | "complete"
 type Phase = "pre" | "live"
-type Step = "upload" | "ready"
+type Step = "upload" | "schedule" | "ready"
 
 const CHECKLIST = [
   "Microphone access required",
@@ -35,7 +35,16 @@ function unlockAudio() {
 
 export default function Interview() {
   const location = useLocation() as unknown as {
-    state?: { candidateId?: string; interviewId?: string; jobRole?: string; jobId?: string; jobTitle?: string; companyName?: string }
+    state?: {
+      candidateId?: string
+      interviewId?: string
+      jobRole?: string
+      jobId?: string
+      jobTitle?: string
+      companyName?: string
+      deadline?: string | null
+      scheduleMode?: boolean
+    }
   }
   const navigate = useNavigate()
   const { theme } = useTheme()
@@ -45,17 +54,26 @@ export default function Interview() {
   const navInterviewId = location.state?.interviewId ?? ""
   const navJobRole     = location.state?.jobRole     ?? ""
   const navJobId       = location.state?.jobId       ?? ""
+  const scheduleMode   = location.state?.scheduleMode ?? false
+  const deadline       = location.state?.deadline ?? null
+  const deadlineDate   = deadline ? String(deadline).split("T")[0] : null
+  const companyName    = location.state?.companyName ?? ""
+  const jobTitle       = location.state?.jobTitle ?? ""
 
   // ── Pre-interview state ───────────────────────────────────────────────────
   const [step,        setStep]        = useState<Step>(navCandidateId ? "ready" : "upload")
   const [candidateId, setCandidateId] = useState(navCandidateId)
-  const [, setInterviewId] = useState(navInterviewId)
+  const [interviewId, setInterviewId] = useState(navInterviewId)
   const [jobRole,     setJobRole]     = useState(navJobRole)
   const [file,        setFile]        = useState<File | null>(null)
   const [uploading,   setUploading]   = useState(false)
   const [uploadError, setUploadError] = useState("")
   const [dragOver,    setDragOver]    = useState(false)
   const [micError,    setMicError]    = useState<string | null>(null)
+  const [scheduleDate, setScheduleDate] = useState("")
+  const [scheduleTime, setScheduleTime] = useState("")
+  const [scheduling, setScheduling] = useState(false)
+  const [scheduleError, setScheduleError] = useState("")
 
   // ── Live interview state ──────────────────────────────────────────────────
   const [phase,               setPhase]               = useState<Phase>("pre")
@@ -255,8 +273,8 @@ export default function Interview() {
       formData.append("file", file)
       formData.append("job_role", jobRole)
       const candidate = JSON.parse(localStorage.getItem("sage_candidate") ?? "{}") as { id?: string; candidate_id?: string }
-      const existingCandidateId = candidate.id ?? candidate.candidate_id ?? localStorage.getItem("sage_candidate_id") ?? ""
-      if (existingCandidateId) formData.append("candidate_id", existingCandidateId)
+      const savedId = localStorage.getItem("sage_candidate_id") || candidate.id || candidate.candidate_id || ""
+      if (savedId) formData.append("candidate_id", savedId)
       if (navJobId) formData.append("job_id", navJobId)
 
       const token = localStorage.getItem("sage_token")
@@ -275,13 +293,56 @@ export default function Interview() {
       localStorage.setItem("sage_interview_id", data.interview_id)
       setCandidateId(data.candidate_id)
       setInterviewId(data.interview_id)
-      setStep("ready")
+      setStep(scheduleMode ? "schedule" : "ready")
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Failed to upload resume"
       console.error("[SAGE] Upload error:", e)
       setUploadError(msg)
     } finally {
       setUploading(false)
+    }
+  }
+
+  async function handleScheduleInterview() {
+    if (!scheduleDate || !scheduleTime) {
+      setScheduleError("Please select both date and time")
+      return
+    }
+    setScheduling(true)
+    setScheduleError("")
+
+    try {
+      const [time, periodRaw] = scheduleTime.split(" ")
+      const period = (periodRaw || "").toUpperCase()
+      let hours = Number(time.split(":")[0])
+      const minutes = Number(time.split(":")[1])
+      if (period === "PM" && hours !== 12) hours += 12
+      if (period === "AM" && hours === 12) hours = 0
+      const scheduledAt = new Date(`${scheduleDate}T${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00`)
+
+      const res = await fetch("http://localhost:8000/api/interviews/schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          interview_id: interviewId,
+          candidate_id: candidateId,
+          job_role: jobRole,
+          scheduled_at: scheduledAt.toISOString(),
+          company: companyName,
+          job_id: navJobId,
+        }),
+      })
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { detail?: string }
+        throw new Error(err.detail || "Failed to schedule")
+      }
+
+      alert(`Interview scheduled for ${new Date(scheduledAt).toLocaleDateString()} at ${scheduleTime}`)
+      navigate("/dashboard")
+    } catch (e: unknown) {
+      setScheduleError(e instanceof Error ? e.message : "Failed to schedule interview")
+    } finally {
+      setScheduling(false)
     }
   }
 
@@ -490,6 +551,74 @@ export default function Interview() {
   // ═══════════════════════════════════════════════════════════════════════════
   // PRE-INTERVIEW: Step 2 — Ready
   // ═══════════════════════════════════════════════════════════════════════════
+  if (phase === "pre" && step === "schedule") {
+    return (
+      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-4">
+        <Card className="max-w-lg w-full p-8 bg-zinc-900 border-zinc-800">
+          <h2 className="text-2xl font-semibold text-white mb-2">Schedule Your Interview</h2>
+          <p className="text-zinc-400 mb-1">
+            {jobTitle || jobRole} {companyName ? `at ${companyName}` : ""}
+          </p>
+          {deadline ? (
+            <p className="text-yellow-400 text-sm mb-6">
+              Application deadline:{" "}
+              {new Date(deadline).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+            </p>
+          ) : (
+            <div className="mb-6" />
+          )}
+
+          <div className="mb-4">
+            <label className="text-sm text-zinc-300 mb-2 block">Select Date</label>
+            <input
+              type="date"
+              value={scheduleDate}
+              min={new Date().toISOString().split("T")[0]}
+              max={deadlineDate || undefined}
+              onChange={(e) => setScheduleDate(e.target.value)}
+              className="w-full p-3 rounded-lg bg-zinc-800 border border-zinc-700 text-white"
+            />
+          </div>
+
+          <div className="mb-6">
+            <label className="text-sm text-zinc-300 mb-2 block">Select Time</label>
+            <div className="grid grid-cols-3 gap-2">
+              {["09:00 AM", "10:00 AM", "11:00 AM", "01:00 PM", "02:00 PM", "03:00 PM", "04:00 PM", "05:00 PM", "06:00 PM"].map((time) => (
+                <button
+                  type="button"
+                  key={time}
+                  onClick={() => setScheduleTime(time)}
+                  className={[
+                    "p-2 rounded-lg text-sm border transition-colors",
+                    scheduleTime === time
+                      ? "bg-purple-600 border-purple-500 text-white"
+                      : "bg-zinc-800 border-zinc-700 text-zinc-300 hover:border-zinc-500",
+                  ].join(" ")}
+                >
+                  {time}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {scheduleError ? <p className="text-red-400 text-sm mb-4">{scheduleError}</p> : null}
+
+          <Button className="w-full" size="lg" disabled={!scheduleDate || !scheduleTime || scheduling} onClick={handleScheduleInterview}>
+            {scheduling ? "Scheduling..." : "Confirm Schedule"}
+          </Button>
+
+          <Button
+            variant="outline"
+            className="w-full mt-2 border-zinc-700 text-zinc-300 hover:bg-zinc-800"
+            onClick={() => navigate("/dashboard")}
+          >
+            Cancel
+          </Button>
+        </Card>
+      </div>
+    )
+  }
+
   if (phase === "pre" && step === "ready") {
     const checkColor = isDark ? "text-[#7C3AED]" : "text-[#2563EB]"
     const cardBg = isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-gray-200"

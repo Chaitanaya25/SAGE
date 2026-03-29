@@ -28,6 +28,7 @@ app.add_middleware(
 )
 
 from auth import create_token, verify_token
+from agents.parser import parse_resume
 from database import (
     create_job_posting,
     create_hr_user,
@@ -69,6 +70,8 @@ class ScheduleInterviewRequest(BaseModel):
     job_role: str
     scheduled_at: str
     company: str | None = None
+    interview_id: str | None = None
+    job_id: str | None = None
 
 
 @app.get("/health")
@@ -87,26 +90,30 @@ async def upload_resume(
     job_role: str = Form(...),
     candidate_id: str | None = Form(None),
     job_id: str | None = Form(None),
+    analysis_only: bool = Form(False),
 ) -> dict:
     try:
         pdf_bytes = await file.read()
 
-        if candidate_id:
+        if not candidate_id:
+            raise HTTPException(status_code=400, detail="candidate_id is required. Please login first.")
+
+        if analysis_only:
             existing = await get_candidate(candidate_id)
             if not existing:
                 raise HTTPException(status_code=404, detail="Candidate not found")
-            await update_candidate(candidate_id, {"resume_url": file.filename})
-        else:
-            candidate = await save_candidate(
-                {
-                    "name": "",
-                    "email": "",
-                    "phone": "",
-                    "resume_url": file.filename,
-                    "resume_parsed": {},
-                }
-            )
-            candidate_id = candidate["id"]
+            parsed = {}
+            try:
+                parsed = await parse_resume(pdf_bytes, candidate_id, job_role)
+            except Exception as e:
+                logger.error("Resume parse failed: %s", e)
+                parsed = {}
+            return {"candidate_id": candidate_id, "resume_parsed": parsed}
+
+        existing = await get_candidate(candidate_id)
+        if not existing:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+        await update_candidate(candidate_id, {"resume_url": file.filename})
 
         interview_payload = {"candidate_id": candidate_id, "job_role": job_role, "status": "pending"}
         if job_id:
@@ -208,15 +215,31 @@ async def schedule_interview(req: ScheduleInterviewRequest) -> dict:
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid scheduled_at")
 
-        interview = await save_interview(
-            {
+        if req.interview_id:
+            existing = await get_interview(req.interview_id)
+            if not existing:
+                raise HTTPException(status_code=404, detail="Interview not found")
+            payload = {
                 "candidate_id": req.candidate_id,
                 "job_role": req.job_role,
                 "status": "pending",
                 "scheduled_at": req.scheduled_at,
                 "company": req.company or "",
             }
-        )
+            if req.job_id:
+                payload["job_id"] = req.job_id
+            interview = await update_interview(req.interview_id, payload)
+        else:
+            payload = {
+                "candidate_id": req.candidate_id,
+                "job_role": req.job_role,
+                "status": "pending",
+                "scheduled_at": req.scheduled_at,
+                "company": req.company or "",
+            }
+            if req.job_id:
+                payload["job_id"] = req.job_id
+            interview = await save_interview(payload)
         return {"interview": interview}
     except HTTPException as e:
         raise e
@@ -300,15 +323,18 @@ async def hr_signup(request: Request) -> dict:
 async def candidate_login(req: CandidateLoginRequest) -> dict:
     try:
         candidates = await get_all_candidates()
-        existing = next((c for c in candidates if c.get("email") == req.email), None)
+        email = req.email.lower()
+        existing = next((c for c in candidates if str(c.get("email", "")).lower() == email), None)
 
         if existing:
             candidate_id = existing["id"]
+            if (not existing.get("name")) and req.name:
+                await update_candidate(candidate_id, {"name": req.name})
         else:
             candidate = await save_candidate(
                 {
                     "name": req.name,
-                    "email": req.email,
+                    "email": email,
                     "phone": "",
                     "resume_url": "",
                     "resume_parsed": {},
@@ -317,7 +343,14 @@ async def candidate_login(req: CandidateLoginRequest) -> dict:
             candidate_id = candidate["id"]
 
         token = create_token(user_id=candidate_id, role="candidate")
-        return {"token": token, "candidate": {"id": candidate_id, "name": req.name, "email": req.email}}
+        return {
+            "token": token,
+            "candidate": {
+                "id": candidate_id,
+                "name": (existing.get("name") if existing else None) or req.name,
+                "email": email,
+            },
+        }
     except Exception as e:
         logger.error("Candidate login failed: %s", e)
         raise HTTPException(status_code=500, detail=str(e)) from e
