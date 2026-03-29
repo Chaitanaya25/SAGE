@@ -265,15 +265,6 @@ export default function CandidateDashboard() {
 
   const candidateId = candidate.id ?? candidate.candidate_id ?? localStorage.getItem("sage_candidate_id") ?? ""
 
-  const isHired = useMemo(() => {
-    try {
-      const hired = JSON.parse(localStorage.getItem("sage_hired") || "[]") as string[]
-      return Boolean(candidateId && hired.includes(candidateId))
-    } catch {
-      return false
-    }
-  }, [candidateId])
-
   const hiredIds = useMemo(() => {
     try {
       return JSON.parse(localStorage.getItem("sage_hired") || "[]") as string[]
@@ -378,7 +369,13 @@ export default function CandidateDashboard() {
     navigate("/login", { replace: true })
   }
 
-  const candidateName = profileName.trim() || candidate.name || "User"
+  const candidateName = (() => {
+    try {
+      return (JSON.parse(localStorage.getItem("sage_candidate") || "{}") as { name?: string }).name || ""
+    } catch {
+      return ""
+    }
+  })()
 
   function formatDay(value?: string | null) {
     if (!value) return "—"
@@ -878,46 +875,45 @@ export default function CandidateDashboard() {
         <main className="p-6">
           {tab === "overview" ? (
             <div>
-              <div className="rounded-xl bg-gradient-to-r from-purple-600 to-blue-600 p-6 text-white mb-6">
-                <h2 className="text-2xl font-bold">Welcome back, {candidateName}!</h2>
-                <p className="text-purple-100 mt-1">Here's your assessment overview</p>
-                <div className="flex flex-wrap gap-3 mt-4 items-center">
-                  <Button size="sm" variant="secondary" onClick={() => setTab("interviews")}>
+              <div
+                className={[
+                  "rounded-xl p-6 border mb-6",
+                  isDark ? "bg-zinc-900 border-zinc-800" : "bg-white border-gray-200",
+                ].join(" ")}
+              >
+                <h2 className="text-2xl font-bold">{candidateName ? `Welcome back, ${candidateName}!` : "Welcome back!"}</h2>
+                <p className="text-muted-foreground mt-1">Here's your assessment overview</p>
+                <div className="flex gap-3 mt-4 flex-wrap">
+                  <Button size="sm" onClick={() => setTab("interviews")} className={isDark ? "bg-white text-black hover:bg-white/90 border border-white" : "bg-black text-white hover:bg-black/90 border border-black"}>
                     Start New Interview
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
-                    className={[
-                      "border-white/30",
-                      isDark ? "bg-black text-white hover:bg-black/90 border-black/40" : "bg-white text-black hover:bg-white/90",
-                    ].join(" ")}
+                    className={isDark ? "border-white text-white hover:bg-white/10" : "border-black text-black hover:bg-black/5"}
                     onClick={() => setTab("resume")}
                   >
                     Analyze Resume
                   </Button>
-                  {isHired ? (
-                    <Badge className="bg-white/15 text-white border border-white/20">Hired!</Badge>
-                  ) : null}
                 </div>
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                <div className="rounded-xl border p-5 relative overflow-hidden">
+                <div className="rounded-xl border p-5 relative overflow-hidden text-center">
                   <Mic className={["absolute -right-2 -top-2 w-16 h-16 opacity-5", isDark ? "text-white" : "text-black"].join(" ")} />
                   <div className={["text-base font-semibold", isDark ? "text-white" : "text-black"].join(" ")}>Interviews</div>
                   <div className="text-2xl font-semibold mt-2">{loading ? "—" : String(stats.total)}</div>
                   <div className="text-xs text-green-400 mt-2">+{weeklyCounts.totalThisWeek} this week</div>
                 </div>
 
-                <div className="rounded-xl border p-5 relative overflow-hidden">
+                <div className="rounded-xl border p-5 relative overflow-hidden text-center">
                   <CheckCircle className={["absolute -right-2 -top-2 w-16 h-16 opacity-5", isDark ? "text-white" : "text-black"].join(" ")} />
                   <div className={["text-base font-semibold", isDark ? "text-white" : "text-black"].join(" ")}>Completed</div>
                   <div className="text-2xl font-semibold mt-2">{loading ? "—" : String(stats.completed)}</div>
                   <div className="text-xs text-green-400 mt-2">+{weeklyCounts.completedThisWeek} this week</div>
                 </div>
 
-                <div className="rounded-xl border p-5 relative overflow-hidden">
+                <div className="rounded-xl border p-5 relative overflow-hidden text-center">
                   <BarChart3 className={["absolute -right-2 -top-2 w-16 h-16 opacity-5", isDark ? "text-white" : "text-black"].join(" ")} />
                   <div className={["text-base font-semibold", isDark ? "text-white" : "text-black"].join(" ")}>Avg Score</div>
                   <div
@@ -939,7 +935,7 @@ export default function CandidateDashboard() {
                   </div>
                 </div>
 
-                <div className="rounded-xl border p-5 relative overflow-hidden">
+                <div className="rounded-xl border p-5 relative overflow-hidden text-center">
                   <TrendingUp className={["absolute -right-2 -top-2 w-16 h-16 opacity-5", isDark ? "text-white" : "text-black"].join(" ")} />
                   <div className={["text-base font-semibold", isDark ? "text-white" : "text-black"].join(" ")}>Resume Score</div>
                   <div className="text-2xl font-semibold mt-2">

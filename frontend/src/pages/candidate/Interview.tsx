@@ -88,8 +88,9 @@ export default function Interview() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const mediaStreamRef   = useRef<MediaStream | null>(null)
   const chunksRef        = useRef<BlobPart[]>([])
-  const audioTimeoutRef  = useRef<number | null>(null)
+  const audioFallbackTimerRef  = useRef<number | null>(null)
   const lastSpokenTypeRef = useRef<"greeting" | "question" | null>(null)
+  const shouldAutoListenRef = useRef(false)
 
   // Refs so WS closure always sees latest values without re-subscribing
   const phaseRef           = useRef(phase)
@@ -150,6 +151,7 @@ export default function Interview() {
         if (msg.type === "greeting") {
           if (typeof msg.text === "string") setCurrentQuestionText(msg.text)
           lastSpokenTypeRef.current = "greeting"
+          shouldAutoListenRef.current = false
           setUiState("ai_speaking")
           return
         }
@@ -158,13 +160,17 @@ export default function Interview() {
           if (typeof msg.index === "number") setQIndex(msg.index)
           if (typeof msg.text  === "string") setCurrentQuestionText(msg.text)
           lastSpokenTypeRef.current = "question"
+          shouldAutoListenRef.current = true
           setUiState("ai_speaking")
-          if (audioTimeoutRef.current) window.clearTimeout(audioTimeoutRef.current)
-          audioTimeoutRef.current = window.setTimeout(() => {
-            const s = uiStateRef.current
-            if (s !== "idle" && s !== "recording") {
-              console.log("Audio timeout — forcing idle state")
+          if (audioFallbackTimerRef.current) window.clearTimeout(audioFallbackTimerRef.current)
+          audioFallbackTimerRef.current = window.setTimeout(() => {
+            console.log("[SAGE] No audio received, forcing idle + auto-listen")
+            if (uiStateRef.current !== "recording") {
               setUiState("idle")
+              setTimeout(() => {
+                console.log("[SAGE] Calling startRecording (audio fallback), phase:", phaseRef.current)
+                if (phaseRef.current === "live") void startRecordingRef.current()
+              }, 500)
             }
           }, 5000)
           return
@@ -194,9 +200,9 @@ export default function Interview() {
       console.log("[SAGE] WS binary, byteLength:", byteLen)
       const audioEl = audioRef.current
       if (!audioEl) { console.warn("[SAGE] audioRef is null"); return }
-      if (audioTimeoutRef.current) {
-        window.clearTimeout(audioTimeoutRef.current)
-        audioTimeoutRef.current = null
+      if (audioFallbackTimerRef.current) {
+        window.clearTimeout(audioFallbackTimerRef.current)
+        audioFallbackTimerRef.current = null
       }
 
       const blob =
@@ -207,30 +213,39 @@ export default function Interview() {
           : null
       if (!blob) return
 
+      console.log("[SAGE] Received audio bytes, size:", blob.size)
       const url = URL.createObjectURL(blob)
       audioEl.src = url
       setUiState("ai_speaking")
-      try {
-        await audioEl.play()
-        console.log("[SAGE] Audio playing")
-      } catch (err) {
-        console.error("[SAGE] Audio play failed:", err)
-        URL.revokeObjectURL(url)
+
+      const triggerAutoListen = (reason: string) => {
+        if (!shouldAutoListenRef.current) return
+        console.log(`[SAGE] Auto-listen triggered (${reason})`)
         setUiState("idle")
+        setTimeout(() => {
+          console.log("[SAGE] Calling startRecording, phase:", phaseRef.current)
+          if (phaseRef.current === "live") void startRecordingRef.current()
+        }, 1000)
       }
+
       audioEl.onended = () => {
+        console.log("[SAGE] AI audio ended, auto-starting mic in 1s...")
         URL.revokeObjectURL(url)
-        setUiState((s) => (s === "ai_speaking" ? "idle" : s))
-        if (lastSpokenTypeRef.current === "question") {
-          console.log("[SAGE] AI finished speaking, auto-starting mic...")
-          setTimeout(() => {
-            if (phaseRef.current === "live") {
-              void startRecordingRef.current()
-            }
-          }, 1000)
-        } else {
-          console.log("[SAGE] Audio finished (no auto-start)")
-        }
+        triggerAutoListen("audio ended")
+      }
+      audioEl.onerror = (e) => {
+        console.error("[SAGE] Audio error:", e)
+        URL.revokeObjectURL(url)
+        triggerAutoListen("audio error")
+      }
+
+      audioEl.oncanplaythrough = () => {
+        console.log("[SAGE] Audio ready, playing…")
+        audioEl.play().catch((err) => {
+          console.error("[SAGE] Audio play failed:", err)
+          URL.revokeObjectURL(url)
+          triggerAutoListen("audio play failed")
+        })
       }
     }
 
@@ -240,9 +255,9 @@ export default function Interview() {
     return () => {
       ws.close()
       wsRef.current = null
-      if (audioTimeoutRef.current) {
-        window.clearTimeout(audioTimeoutRef.current)
-        audioTimeoutRef.current = null
+      if (audioFallbackTimerRef.current) {
+        window.clearTimeout(audioFallbackTimerRef.current)
+        audioFallbackTimerRef.current = null
       }
       mediaRecorderRef.current?.stop()
       mediaStreamRef.current?.getTracks().forEach((t) => t.stop())
@@ -364,13 +379,14 @@ export default function Interview() {
     try {
       const ws = wsRef.current
       if (!ws || ws.readyState !== WebSocket.OPEN) {
-        console.warn("[SAGE] WS not open, cannot record")
+        console.error("[SAGE] WebSocket not open, cannot record")
         return
       }
       if (mediaRecorderRef.current?.state === "recording") return
 
       setUiState("recording")
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      console.log("[SAGE] Mic stream obtained")
       mediaStreamRef.current = stream
 
       const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
@@ -407,6 +423,7 @@ export default function Interview() {
 
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data) }
       recorder.onstop = () => {
+        console.log("[SAGE] Recording stopped, chunks:", chunksRef.current.length)
         clearInterval(silenceCheck)
         if (silenceTimer) { clearTimeout(silenceTimer); silenceTimer = null }
         void audioCtx.close()
@@ -418,6 +435,7 @@ export default function Interview() {
         mediaStreamRef.current = null
       }
       recorder.start()
+      console.log("[SAGE] Recording started")
     } catch (err) {
       console.error("[SAGE] startRecording failed:", err)
       setUiState("idle")
