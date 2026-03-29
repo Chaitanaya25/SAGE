@@ -32,8 +32,8 @@ export default function Home() {
     isDark ? "bg-zinc-900/60 border-zinc-700/50 text-zinc-50" : "bg-white/70 border-gray-200/50 text-gray-900",
   ].join(" ")
   const outlineCtaClass = isDark
-    ? "border-zinc-700/60 bg-transparent hover:bg-zinc-900"
-    : "border-black text-black hover:bg-black hover:text-white"
+    ? "bg-white text-black border border-white hover:bg-white/90"
+    : "bg-black text-white border border-black hover:bg-black/90"
 
   useEffect(() => {
     if (metricsInView) return
@@ -88,14 +88,14 @@ export default function Home() {
                 </span>
               </h1>
               <div className="text-lg text-muted-foreground text-center max-w-2xl mx-auto mt-4">
-                End-to-end candidate screening. Resume parsing, voice interviews, and AI evaluation — fully autonomous.
+                End-to-end candidate screening. Resume parsing, voice interviews, and AI evaluation.
               </div>
               <div className="mt-8 flex gap-4 justify-center">
                 <Button
                   asChild
                   size="lg"
                   className={
-                    isDark ? "bg-[#7C3AED] hover:bg-[#7C3AED]/90" : "bg-black text-white hover:bg-black/90 border border-black"
+                    isDark ? "bg-white text-black hover:bg-white/90 border border-white" : "bg-black text-white hover:bg-black/90 border border-black"
                   }
                 >
                   <Link to="/login">Login</Link>
