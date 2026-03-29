@@ -44,6 +44,8 @@ export default function Interview() {
       companyName?: string
       deadline?: string | null
       scheduleMode?: boolean
+      demoMode?: boolean
+      demoToken?: string
     }
   }
   const navigate = useNavigate()
@@ -55,13 +57,19 @@ export default function Interview() {
   const navJobRole     = location.state?.jobRole     ?? ""
   const navJobId       = location.state?.jobId       ?? ""
   const scheduleMode   = location.state?.scheduleMode ?? false
+  const demoMode       = location.state?.demoMode ?? false
+  const demoToken      = location.state?.demoToken ?? ""
   const deadline       = location.state?.deadline ?? null
   const deadlineDate   = deadline ? String(deadline).split("T")[0] : null
   const companyName    = location.state?.companyName ?? ""
   const jobTitle       = location.state?.jobTitle ?? ""
 
   // ── Pre-interview state ───────────────────────────────────────────────────
-  const [step,        setStep]        = useState<Step>(navCandidateId ? "ready" : "upload")
+  const [step,        setStep]        = useState<Step>(() => {
+    if (navCandidateId) return "ready"
+    if (demoMode) return "upload"
+    return "upload"
+  })
   const [candidateId, setCandidateId] = useState(navCandidateId)
   const [interviewId, setInterviewId] = useState(navInterviewId)
   const [jobRole,     setJobRole]     = useState(navJobRole)
@@ -74,6 +82,21 @@ export default function Interview() {
   const [scheduleTime, setScheduleTime] = useState("")
   const [scheduling, setScheduling] = useState(false)
   const [scheduleError, setScheduleError] = useState("")
+
+  useEffect(() => {
+    if (!demoMode) return
+    if (!navInterviewId) return
+    try {
+      const raw = localStorage.getItem("sage_demo_interview_ids") || "[]"
+      const ids = (JSON.parse(raw) as unknown[]).filter((x): x is string => typeof x === "string")
+      if (!ids.includes(navInterviewId)) {
+        ids.push(navInterviewId)
+        localStorage.setItem("sage_demo_interview_ids", JSON.stringify(ids))
+      }
+    } catch {
+      localStorage.setItem("sage_demo_interview_ids", JSON.stringify([navInterviewId]))
+    }
+  }, [demoMode, navInterviewId])
 
   // ── Live interview state ──────────────────────────────────────────────────
   const [phase,               setPhase]               = useState<Phase>("pre")
@@ -288,11 +311,31 @@ export default function Interview() {
       formData.append("file", file)
       formData.append("job_role", jobRole)
       const candidate = JSON.parse(localStorage.getItem("sage_candidate") ?? "{}") as { id?: string; candidate_id?: string }
-      const savedId = localStorage.getItem("sage_candidate_id") || candidate.id || candidate.candidate_id || ""
+      let savedId = demoMode ? "" : (localStorage.getItem("sage_candidate_id") || candidate.id || candidate.candidate_id || "")
+      let tokenOverride = demoMode ? demoToken : ""
+
+      if (!savedId && demoMode) {
+        const demoEmail = `demo+${Date.now()}@sage.ai`
+        const demoName = "Demo Candidate"
+        const r = await fetch("http://localhost:8000/api/auth/candidate-login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: demoName, email: demoEmail }),
+        })
+        if (!r.ok) {
+          const err = (await r.json().catch(() => ({}))) as { detail?: string }
+          throw new Error(err.detail ?? "Demo login failed")
+        }
+        const data = (await r.json()) as { token: string; candidate: { id: string; name?: string; email?: string } }
+        savedId = String(data.candidate.id)
+        tokenOverride = data.token
+        setCandidateId(savedId)
+      }
+
       if (savedId) formData.append("candidate_id", savedId)
       if (navJobId) formData.append("job_id", navJobId)
 
-      const token = localStorage.getItem("sage_token")
+      const token = tokenOverride || demoToken || localStorage.getItem("sage_token")
       const res = await fetch("http://localhost:8000/api/upload-resume", {
         method: "POST",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -304,11 +347,22 @@ export default function Interview() {
       }
       const data = await res.json() as { candidate_id: string; interview_id: string }
       console.log("[SAGE] Upload success:", data)
-      localStorage.setItem("sage_candidate_id", data.candidate_id)
-      localStorage.setItem("sage_interview_id", data.interview_id)
+      if (demoMode) {
+        try {
+          const raw = localStorage.getItem("sage_demo_interview_ids") || "[]"
+          const ids = (JSON.parse(raw) as unknown[]).filter((x): x is string => typeof x === "string")
+          if (!ids.includes(data.interview_id)) ids.push(data.interview_id)
+          localStorage.setItem("sage_demo_interview_ids", JSON.stringify(ids))
+        } catch {
+          localStorage.setItem("sage_demo_interview_ids", JSON.stringify([data.interview_id]))
+        }
+      } else {
+        localStorage.setItem("sage_candidate_id", data.candidate_id)
+        localStorage.setItem("sage_interview_id", data.interview_id)
+      }
       setCandidateId(data.candidate_id)
       setInterviewId(data.interview_id)
-      setStep(scheduleMode ? "schedule" : "ready")
+      setStep(scheduleMode && !demoMode ? "schedule" : "ready")
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Failed to upload resume"
       console.error("[SAGE] Upload error:", e)
@@ -319,21 +373,15 @@ export default function Interview() {
   }
 
   async function handleScheduleInterview() {
-    if (!scheduleDate || !scheduleTime) {
-      setScheduleError("Please select both date and time")
+    if (!scheduleDate) {
+      setScheduleError("Please select a date")
       return
     }
     setScheduling(true)
     setScheduleError("")
 
     try {
-      const [time, periodRaw] = scheduleTime.split(" ")
-      const period = (periodRaw || "").toUpperCase()
-      let hours = Number(time.split(":")[0])
-      const minutes = Number(time.split(":")[1])
-      if (period === "PM" && hours !== 12) hours += 12
-      if (period === "AM" && hours === 12) hours = 0
-      const scheduledAt = new Date(`${scheduleDate}T${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00`)
+      const scheduledAt = new Date(`${scheduleDate}T00:00:00.000Z`)
 
       const res = await fetch("http://localhost:8000/api/interviews/schedule", {
         method: "POST",
@@ -352,7 +400,7 @@ export default function Interview() {
         throw new Error(err.detail || "Failed to schedule")
       }
 
-      alert(`Interview scheduled for ${new Date(scheduledAt).toLocaleDateString()} at ${scheduleTime}`)
+      alert(`Interview scheduled on ${new Date(scheduledAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`)
       navigate("/dashboard")
     } catch (e: unknown) {
       setScheduleError(e instanceof Error ? e.message : "Failed to schedule interview")
@@ -373,6 +421,16 @@ export default function Interview() {
       setMicError("Microphone access denied. Please allow it and try again.")
     }
   }
+
+  useEffect(() => {
+    if (!demoMode) return
+    if (phase !== "pre") return
+    if (step !== "ready") return
+    const t = window.setTimeout(() => {
+      void handleStart()
+    }, 400)
+    return () => window.clearTimeout(t)
+  }, [demoMode, phase, step])
 
   async function startRecording() {
     console.log("[SAGE] startRecording called. uiState:", uiStateRef.current, "ws readyState:", wsRef.current?.readyState)
@@ -403,7 +461,7 @@ export default function Interview() {
     audioCtx.createMediaStreamSource(stream).connect(analyser)
     const volumeData = new Uint8Array(analyser.frequencyBinCount)
     let silenceTimer: ReturnType<typeof setTimeout> | null = null
-    const SILENCE_MS = 4000
+    const SILENCE_MS = 3000
 
     const silenceCheck = setInterval(() => {
       analyser.getByteFrequencyData(volumeData)
@@ -411,7 +469,6 @@ export default function Interview() {
       if (avg / 255 < 0.005) {
         if (!silenceTimer) {
           silenceTimer = setTimeout(() => {
-            console.log("[SAGE] Silence detected, stopping recording")
             clearInterval(silenceCheck)
             stopRecording()
           }, SILENCE_MS)
@@ -621,7 +678,7 @@ export default function Interview() {
 
           {scheduleError ? <p className="text-red-400 text-sm mb-4">{scheduleError}</p> : null}
 
-          <Button className="w-full" size="lg" disabled={!scheduleDate || !scheduleTime || scheduling} onClick={handleScheduleInterview}>
+          <Button className="w-full" size="lg" disabled={!scheduleDate || scheduling} onClick={handleScheduleInterview}>
             {scheduling ? "Scheduling..." : "Confirm Schedule"}
           </Button>
 

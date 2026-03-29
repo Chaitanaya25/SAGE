@@ -6,6 +6,7 @@ import CandidateHome from "@/pages/candidate/Home"
 import CandidateInterview from "@/pages/candidate/Interview"
 import CandidateLogin from "@/pages/candidate/Login"
 import CandidateUpload from "@/pages/candidate/Upload"
+import DemoPage from "@/pages/Demo"
 import PricingPage from "@/pages/Pricing"
 import Dashboard from "@/pages/hr/Dashboard"
 import HRPricing from "@/pages/hr/Pricing"
@@ -21,6 +22,7 @@ export default function App() {
         <Route path="/schedule" element={<Navigate to="/dashboard" replace />} />
         <Route path="/interviews" element={<Navigate to="/dashboard" replace />} />
         <Route path="/pricing" element={<PricingPage />} />
+        <Route path="/demo" element={<DemoPage />} />
         <Route path="/login" element={<CandidateLogin />} />
         <Route path="/dashboard" element={<CandidateDashboard />} />
         <Route path="/upload" element={<CandidateUpload />} />

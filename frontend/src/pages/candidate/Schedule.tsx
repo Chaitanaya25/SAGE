@@ -50,33 +50,71 @@ export function ScheduleContent() {
     const raw = (await res.json()) as unknown
     const arr: unknown[] =
       Array.isArray(raw) ? raw : Array.isArray((raw as { interviews?: unknown[] } | null)?.interviews) ? (raw as { interviews: unknown[] }).interviews : []
-    const mine = candidateId
+    let mine = candidateId
       ? arr.filter((x) => {
           const r = x && typeof x === "object" ? (x as Record<string, unknown>) : {}
           return String(r.candidate_id ?? "") === candidateId
         })
       : arr
+
+    try {
+      const rawIds = localStorage.getItem("sage_demo_interview_ids") || "[]"
+      const demoIds = new Set((JSON.parse(rawIds) as unknown[]).filter((x): x is string => typeof x === "string"))
+      mine = mine.filter((x) => {
+        const r = x && typeof x === "object" ? (x as Record<string, unknown>) : {}
+        return !demoIds.has(String(r.id ?? ""))
+      })
+    } catch {
+      // ignore
+    }
+
+    const jobRes = await fetch("http://localhost:8000/api/jobs?all=true", { headers, signal })
+    const jobsData = (await jobRes.json().catch(() => [])) as unknown
+    const jobsRaw: unknown[] = Array.isArray(jobsData) ? jobsData : []
+    const jobsAll = jobsRaw
+      .map((x) => (x && typeof x === "object" ? (x as Record<string, unknown>) : null))
+      .filter((x): x is Record<string, unknown> => Boolean(x))
+    const invalidJobStatuses = new Set(["closed", "deleted", "inactive"])
+    const jobById = new Map(jobsAll.map((j) => [String(j.id ?? ""), j]))
+    const today = new Date().toISOString().split("T")[0]
+
     const mapped: ScheduledInterview[] = mine
       .map((x) => (x && typeof x === "object" ? (x as Record<string, unknown>) : {}))
       .map((r) => {
+        const jobId = r.job_id ? String(r.job_id) : ""
+        const job = jobId ? jobById.get(jobId) : null
+        if (jobId) {
+          if (!job) return null
+          const st = String(job.status ?? "").toLowerCase()
+          if (st && (invalidJobStatuses.has(st) || st !== "active")) return null
+        }
         const scheduledAt = typeof r.scheduled_at === "string" ? r.scheduled_at : ""
         const createdAt = typeof r.created_at === "string" ? r.created_at : ""
         const when = scheduledAt || createdAt
         const d = when ? new Date(when) : null
         const date = d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }) : "—"
-        const time = d && !Number.isNaN(d.getTime()) ? d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "—"
+        const scheduledDate = scheduledAt ? String(scheduledAt).split("T")[0] : ""
+        const time = scheduledAt ? "Anytime" : d && !Number.isNaN(d.getTime()) ? d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "—"
         const statusRaw = String(r.status ?? "").toLowerCase()
-        const status: ScheduledInterview["status"] =
-          statusRaw.includes("complete") ? "Completed" : statusRaw.includes("confirm") ? "Confirmed" : "Pending"
+        const status: ScheduledInterview["status"] = statusRaw.includes("complete")
+          ? "Completed"
+          : !scheduledDate
+            ? "Upcoming"
+            : scheduledDate === today
+              ? "Available Today"
+              : today < scheduledDate
+                ? "Upcoming"
+                : "Expired"
         return {
           id: String(r.id ?? ""),
-          company: String(r.company ?? "—"),
-          role: String(r.job_role ?? r.role ?? "—"),
+          company: String(job?.company_name ?? r.company ?? "—"),
+          role: String(job?.job_role ?? r.job_role ?? r.role ?? "—"),
           date,
           time,
           status,
         }
       })
+      .filter((x): x is ScheduledInterview => Boolean(x))
       .filter((i) => i.id && i.role !== "—")
       .sort((a, b) => (a.date < b.date ? 1 : -1))
     setScheduledList(mapped)

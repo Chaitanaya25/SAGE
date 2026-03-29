@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
@@ -295,7 +296,13 @@ async def update_job_posting(job_id: str, data: Dict[str, Any]) -> Optional[Dict
 
 async def delete_job_posting(job_id: str) -> bool:
     def _op() -> bool:
-        resp = _get_supabase().table("job_postings").delete().eq("id", job_id).execute()
+        resp = (
+            _get_supabase()
+            .table("job_postings")
+            .update({"status": "deleted", "updated_at": datetime.now(timezone.utc).isoformat()})
+            .eq("id", job_id)
+            .execute()
+        )
         rows = resp.data or []
         return bool(rows)
 

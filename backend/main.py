@@ -29,6 +29,7 @@ app.add_middleware(
 
 from auth import create_token, verify_token
 from agents.parser import parse_resume
+from agents import evaluator
 from database import (
     create_job_posting,
     create_hr_user,
@@ -190,8 +191,90 @@ async def get_interview_questions(interview_id: str) -> dict:
 @app.get("/api/report/{interview_id}")
 async def get_interview_report(interview_id: str) -> dict:
     report = await get_report(interview_id)
+    if report:
+        return report
+
+    interview = await get_interview(interview_id)
+    if not interview:
+        raise HTTPException(status_code=404, detail="Interview not found")
+
+    responses = await get_responses(interview_id)
+    if not responses:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    questions = await get_questions(interview_id)
+    q_map = {str(q.get("id", "")): str(q.get("question_text", "")) for q in (questions or []) if q.get("id")}
+
+    resume_parsed = {}
+    try:
+        cand = await get_candidate(str(interview.get("candidate_id", "")))
+        if cand and isinstance(cand.get("resume_parsed"), dict):
+            resume_parsed = cand.get("resume_parsed") or {}
+    except Exception as e:
+        logger.error("Failed to load candidate resume_parsed: %s", e)
+        resume_parsed = {}
+
+    transcript = []
+    for r in responses:
+        qid = str(r.get("question_id", ""))
+        transcript.append(
+            {
+                "question": q_map.get(qid) or "Question",
+                "answer": str(r.get("transcript", "") or ""),
+                "scores": r.get("scores") or {},
+            }
+        )
+
+    job_role = str(interview.get("job_role", "") or "")
+    aggregated = {}
+    overall_score = 0.0
+    try:
+        aggregated = await evaluator.evaluate_full_interview(transcript, resume_parsed, job_role)
+        overall_score = float(aggregated.get("overall_score") or 0.0)
+    except Exception as e:
+        logger.error("Fallback report evaluation failed: %s", e)
+        aggregated = {}
+        overall_score = 0.0
+
+    avg_scores = aggregated.get("average_scores") or {}
+    tech = float(avg_scores.get("technical_depth") or 0)
+    comm = float(avg_scores.get("communication") or 0)
+    rel = float(avg_scores.get("relevance") or 0)
+    conf = float(avg_scores.get("confidence") or 0)
+
+    recommendation = "REVIEW"
+    if overall_score >= 7.0 and min(tech, comm, rel, conf) >= 5.0:
+        recommendation = "HIRE"
+    elif overall_score < 5.5 or min(tech, comm, rel, conf) < 4.0:
+        recommendation = "NO_HIRE"
+
+    summary = (
+        f"Overall score: {overall_score:.1f}/10.\n\n"
+        f"Average scores — Technical: {tech:.1f}, Communication: {comm:.1f}, Relevance: {rel:.1f}, Confidence: {conf:.1f}."
+    )
+
+    await save_report(
+        {
+            "interview_id": interview_id,
+            "overall_score": overall_score,
+            "scores_json": aggregated,
+            "strengths": aggregated.get("strengths") or [],
+            "weaknesses": aggregated.get("weaknesses") or [],
+            "recommendation": recommendation,
+            "summary": summary,
+            "suggested_follow_up": [],
+        }
+    )
+
+    if overall_score:
+        try:
+            await update_interview(interview_id, {"overall_score": overall_score, "status": "completed"})
+        except Exception as e:
+            logger.error("Failed to backfill interview overall_score: %s", e)
+
+    report = await get_report(interview_id)
     if not report:
-        raise HTTPException(status_code=404, detail="Report not yet generated")
+        raise HTTPException(status_code=404, detail="Report not found")
     return report
 
 

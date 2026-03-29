@@ -37,24 +37,37 @@ interface Interview {
   created_at: string
   scheduled_at?: string | null
   overall_score: number | null
+  job_id?: string | null
 }
 
-function isInterviewReady(interview: Interview) {
-  if (!interview.scheduled_at) return true
-  const scheduled = new Date(interview.scheduled_at)
-  const now = new Date()
-  const diffMinutes = (scheduled.getTime() - now.getTime()) / (1000 * 60)
-  return diffMinutes <= 15 && diffMinutes >= -60
+function getInterviewDayStatus(interview: Interview) {
+  if (interview.status === "in_progress") return "available" as const
+  if (!interview.scheduled_at) return "available" as const
+  const scheduledDate = String(interview.scheduled_at).split("T")[0]
+  const today = new Date().toISOString().split("T")[0]
+  if (today === scheduledDate) return "available" as const
+  if (today < scheduledDate) return "upcoming" as const
+  return "expired" as const
 }
 
-function StatusBadge({ status }: { status: Interview["status"] }) {
-  const map: Record<Interview["status"], { label: string; className: string }> = {
-    pending: { label: "Scheduled", className: "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-400 dark:border-amber-800" },
-    in_progress: { label: "In Progress", className: "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-900/30 dark:text-blue-400 dark:border-blue-800" },
-    completed: { label: "Completed", className: "bg-green-100 text-green-800 border-green-200 dark:bg-green-900/30 dark:text-green-400 dark:border-green-800" },
-    interrupted: { label: "Interrupted", className: "bg-red-100 text-red-800 border-red-200 dark:bg-red-900/30 dark:text-red-400 dark:border-red-800" },
-  }
-  const { label, className } = map[status] ?? map.pending
+function StatusBadge({ interview }: { interview: Interview }) {
+  const { theme } = useTheme()
+  const isDark = theme === "dark"
+  const status = interview.status
+  const dayStatus = getInterviewDayStatus(interview)
+  const label =
+    status === "completed"
+      ? "Completed"
+      : status === "in_progress"
+        ? "In Progress"
+        : !interview.scheduled_at
+          ? "Scheduled"
+          : dayStatus === "available"
+            ? "Available Today"
+            : dayStatus === "upcoming"
+              ? "Upcoming"
+              : "Expired"
+  const className = isDark ? "border-white text-white bg-transparent" : "border-black text-black bg-transparent"
   return (
     <Badge variant="outline" className={["text-xs font-medium px-2 py-0.5", className].join(" ")}>
       {label}
@@ -81,15 +94,55 @@ function InterviewListInner({ compact = false }: { compact?: boolean }) {
         setLoading(true)
         setError(null)
         const raw = (await getInterviews(controller.signal)) as unknown
-        const arr: Interview[] = Array.isArray(raw)
-          ? (raw as Interview[])
+        const arrRaw: unknown[] = Array.isArray(raw)
+          ? (raw as unknown[])
           : Array.isArray((raw as { interviews?: unknown[] } | null)?.interviews)
-            ? ((raw as { interviews: Interview[] }).interviews ?? [])
+            ? (((raw as { interviews?: unknown[] }).interviews ?? []) as unknown[])
             : []
+        const arr: Interview[] = arrRaw
+          .map((x) => (x && typeof x === "object" ? (x as Record<string, unknown>) : {}))
+          .map((r) => ({
+            id: String(r.id ?? ""),
+            candidate_id: String(r.candidate_id ?? ""),
+            job_role: String(r.job_role ?? ""),
+            status: String(r.status ?? "pending") as Interview["status"],
+            created_at: String(r.created_at ?? ""),
+            scheduled_at: (typeof r.scheduled_at === "string" ? r.scheduled_at : null) as string | null,
+            overall_score: (typeof r.overall_score === "number" ? r.overall_score : null) as number | null,
+            job_id: (r.job_id ? String(r.job_id) : null) as string | null,
+          }))
+          .filter((i) => i.id && i.candidate_id && i.job_role)
         const candidate = JSON.parse(localStorage.getItem("sage_candidate") ?? "{}") as { id?: string; candidate_id?: string }
         const candidateId = candidate?.id ?? candidate?.candidate_id ?? localStorage.getItem("sage_candidate_id") ?? null
-        const filtered = candidateId ? arr.filter((i) => i.candidate_id === candidateId) : arr
-        setInterviews(filtered)
+        let mine = candidateId ? arr.filter((i) => i.candidate_id === candidateId) : arr
+        try {
+          const raw = localStorage.getItem("sage_demo_interview_ids") || "[]"
+          const demoIds = new Set((JSON.parse(raw) as unknown[]).filter((x): x is string => typeof x === "string"))
+          mine = mine.filter((iv) => !demoIds.has(iv.id))
+        } catch {
+          // ignore
+        }
+
+        const jobRes = await fetch("http://localhost:8000/api/jobs?all=true", { signal: controller.signal })
+        const jobsData = (await jobRes.json().catch(() => [])) as unknown
+        const jobsRaw: unknown[] = Array.isArray(jobsData) ? jobsData : []
+        const jobsAll = jobsRaw
+          .map((x) => (x && typeof x === "object" ? (x as Record<string, unknown>) : null))
+          .filter((x): x is Record<string, unknown> => Boolean(x))
+        const invalidJobStatuses = new Set(["closed", "deleted", "inactive"])
+        const jobById = new Map(jobsAll.map((j) => [String(j.id ?? ""), j]))
+
+        const valid = mine.filter((iv) => {
+          if (!iv.job_id) return true
+          const job = jobById.get(String(iv.job_id))
+          if (!job) return false
+          const st = String(job.status ?? "").toLowerCase()
+          if (!st) return true
+          if (invalidJobStatuses.has(st)) return false
+          return st === "active"
+        })
+
+        setInterviews(valid)
       } catch (e) {
         setInterviews([])
         setError(e instanceof Error ? e.message : "Failed to load interviews")
@@ -142,7 +195,7 @@ function InterviewListInner({ compact = false }: { compact?: boolean }) {
           )}
         </button>
       ),
-      cell: ({ getValue }) => <StatusBadge status={getValue() as Interview["status"]} />,
+      cell: ({ row }) => <StatusBadge interview={row.original} />,
     },
     {
       accessorKey: "created_at",
@@ -209,18 +262,19 @@ function InterviewListInner({ compact = false }: { compact?: boolean }) {
             <Button
               size="sm"
               variant="outline"
-              className={isDark ? "border-zinc-700 text-zinc-200 hover:bg-zinc-800" : ""}
-              onClick={() => navigate("/done", { state: { interviewId: id } })}
+              className={isDark ? "bg-white text-black hover:bg-white/90 border border-white" : "bg-black text-white hover:bg-black/90 border border-black"}
+              onClick={() => navigate("/dashboard", { state: { tab: "reports", reportId: id } })}
             >
               <FileText size={14} className="mr-1.5" />
               View Report
             </Button>
           )
         }
-        return isInterviewReady(row.original) ? (
+        const dayStatus = getInterviewDayStatus(row.original)
+        return dayStatus === "available" ? (
           <Button
             size="sm"
-            className={isDark ? "bg-[#7C3AED] hover:bg-[#7C3AED]/90 text-white" : "bg-black text-white hover:bg-black/90"}
+            className={isDark ? "bg-white text-black hover:bg-white/90 border border-white" : "bg-black text-white hover:bg-black/90 border border-black"}
             onClick={() => navigate("/interview", { state: { candidateId: candidate_id, interviewId: id, jobRole: job_role } })}
           >
             <Mic size={14} className="mr-1.5" />
@@ -228,13 +282,13 @@ function InterviewListInner({ compact = false }: { compact?: boolean }) {
           </Button>
         ) : scheduled_at ? (
           <span className="text-sm text-muted-foreground">
-            Scheduled: {new Date(scheduled_at).toLocaleDateString()}{" "}
-            {new Date(scheduled_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            {dayStatus === "upcoming" ? "Upcoming" : "Expired"}:{" "}
+            {new Date(scheduled_at).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
           </span>
         ) : (
           <Button
             size="sm"
-            className={isDark ? "bg-[#7C3AED] hover:bg-[#7C3AED]/90 text-white" : "bg-black text-white hover:bg-black/90"}
+            className={isDark ? "bg-white text-black hover:bg-white/90 border border-white" : "bg-black text-white hover:bg-black/90 border border-black"}
             onClick={() => navigate("/interview", { state: { candidateId: candidate_id, interviewId: id, jobRole: job_role } })}
           >
             <Mic size={14} className="mr-1.5" />
@@ -275,7 +329,7 @@ function InterviewListInner({ compact = false }: { compact?: boolean }) {
             </div>
             <Button
               onClick={() => navigate("/upload")}
-              className={isDark ? "bg-[#7C3AED] hover:bg-[#7C3AED]/90 text-white" : "bg-black text-white hover:bg-black/90"}
+              className={isDark ? "bg-white text-black hover:bg-white/90 border border-white" : "bg-black text-white hover:bg-black/90 border border-black"}
             >
               <Plus size={16} className="mr-1.5" />
               New Interview

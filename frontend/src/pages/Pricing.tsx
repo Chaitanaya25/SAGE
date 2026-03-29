@@ -31,6 +31,7 @@ const CANDIDATE_PLANS = [
       { text: "12-question extended interviews" },
       { text: "Radar chart skill analytics" },
       { text: "Skill gap analysis & recommendations" },
+      { text: "AI Coach with improvement plans" },
       { text: "Priority email support", tooltip: "Response within 24 hours" },
       { text: "Interview preparation insights" },
     ],
@@ -147,4 +148,3 @@ export default function PricingPage() {
     </div>
   )
 }
-

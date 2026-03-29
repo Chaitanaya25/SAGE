@@ -1,10 +1,11 @@
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import { Moon, Sun } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { useTheme } from "@/lib/theme-context"
 
 export default function HomeHeader() {
+  const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
   const isDark = theme === "dark"
 
@@ -47,6 +48,13 @@ export default function HomeHeader() {
             className={isDark ? "border-zinc-800 bg-transparent hover:bg-zinc-900" : "border-gray-200 bg-white hover:bg-gray-50"}
           >
             {isDark ? <Sun size={16} /> : <Moon size={16} />}
+          </Button>
+          <Button
+            variant="outline"
+            className={isDark ? "bg-white text-black hover:bg-white/90 border border-white" : "bg-black text-white hover:bg-black/90 border border-black"}
+            onClick={() => navigate("/demo")}
+          >
+            Try Demo
           </Button>
           <Button asChild className={isDark ? "bg-[#7C3AED] text-white hover:bg-[#7C3AED]/90" : "bg-black text-white hover:bg-black/90 border border-black"}>
             <Link to="/login">Login</Link>

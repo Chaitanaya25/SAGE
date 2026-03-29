@@ -11,12 +11,11 @@ export default function Done() {
           Thank you for your time. Your responses have been recorded and will be reviewed shortly.
         </div>
         <div className="mt-8">
-          <Link className="text-sm text-[#2563EB] hover:underline" to="/login">
-            Return to Home
+          <Link className="text-sm text-[#2563EB] hover:underline" to="/dashboard">
+            Return to Dashboard
           </Link>
         </div>
       </div>
     </div>
   )
 }
-

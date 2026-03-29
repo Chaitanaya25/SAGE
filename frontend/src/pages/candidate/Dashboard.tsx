@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { useLocation, useNavigate } from "react-router-dom"
-import { BarChart3, Briefcase, Calendar, CheckCircle, CreditCard, FileSearch, FileText, LayoutDashboard, LogOut, Mic, Moon, Settings, Sun, TrendingUp, Upload } from "lucide-react"
+import { BarChart3, BookOpen, Briefcase, Calendar, CheckCircle, Code, CreditCard, FileSearch, FileText, GraduationCap, LayoutDashboard, LogOut, MessageCircle, Mic, Moon, Settings, Shield, Sun, Target, TrendingUp, Upload } from "lucide-react"
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart } from "recharts"
 
 import { InterviewListContent } from "@/pages/candidate/InterviewList"
@@ -30,7 +30,20 @@ import {
 import { getJobs, type JobPosting } from "@/lib/api"
 import { useTheme } from "@/lib/theme-context"
 
-type Tab = "overview" | "jobs" | "resume" | "interviews" | "schedule" | "scores" | "reports" | "settings" | "pricing"
+type Tab = "overview" | "jobs" | "resume" | "interviews" | "schedule" | "scores" | "reports" | "coach" | "settings" | "pricing"
+
+const TAB_TITLES: Record<Tab, string> = {
+  overview: "Overview",
+  jobs: "Browse Jobs",
+  resume: "Resume Analysis",
+  interviews: "Voice Interviews",
+  schedule: "Schedule",
+  scores: "Score Dashboard",
+  reports: "My Reports",
+  coach: "AI Coach",
+  settings: "Settings",
+  pricing: "Pricing",
+}
 
 type CandidateReportDetail = {
   id: string
@@ -66,6 +79,7 @@ type UpcomingInterview = {
   date: string
   time: string
   status: "Pending" | "In Progress" | "Completed"
+  isAvailableToday: boolean
 }
 
 type AppliedJob = {
@@ -77,7 +91,7 @@ type AppliedJob = {
   requirements: string
   status: string
   score: number | null
-  job_id?: string | null
+  job_id: string | null
 }
 
 type ResumeAnalysisResult = {
@@ -92,19 +106,13 @@ function AnalysisResults({ result, job }: { result: ResumeAnalysisResult; job: A
   const { theme } = useTheme()
   const isDark = theme === "dark"
   const color = isDark ? "#7C3AED" : "#2563EB"
+  const chipCls = isDark ? "border-white text-white bg-transparent" : "border-black text-black bg-transparent"
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="p-6 text-center">
           <h3 className="text-sm text-muted-foreground mb-2">ATS Score</h3>
-          <div
-            className={[
-              "text-5xl font-bold",
-              result.overall >= 75 ? "text-green-500" : result.overall >= 50 ? "text-yellow-500" : "text-red-500",
-            ].join(" ")}
-          >
-            {result.overall}
-          </div>
+          <div className="text-5xl font-bold">{result.overall}</div>
           <p className="text-muted-foreground text-sm">/100</p>
         </Card>
 
@@ -121,25 +129,18 @@ function AnalysisResults({ result, job }: { result: ResumeAnalysisResult; job: A
 
         <Card className="p-6 text-center">
           <h3 className="text-sm text-muted-foreground mb-2">Hiring Probability</h3>
-          <div
-            className={[
-              "text-5xl font-bold",
-              result.hiringProbability >= 70 ? "text-green-500" : result.hiringProbability >= 40 ? "text-yellow-500" : "text-red-500",
-            ].join(" ")}
-          >
-            {result.hiringProbability}%
-          </div>
+          <div className="text-5xl font-bold">{result.hiringProbability}%</div>
           <p className="text-sm text-muted-foreground mt-1">for {job?.job_title}</p>
         </Card>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card className="p-6">
-          <h3 className="font-semibold mb-3 text-green-500">Matched Skills</h3>
+          <h3 className="font-semibold mb-3">Matched Skills</h3>
           <div className="flex flex-wrap gap-2">
             {result.matchedSkills.length ? (
               result.matchedSkills.map((s) => (
-                <Badge key={s} className="bg-green-500/10 text-green-500 border border-green-500/20">
+                <Badge key={s} variant="outline" className={chipCls}>
                   {s}
                 </Badge>
               ))
@@ -149,11 +150,11 @@ function AnalysisResults({ result, job }: { result: ResumeAnalysisResult; job: A
           </div>
         </Card>
         <Card className="p-6">
-          <h3 className="font-semibold mb-3 text-red-500">Missing Skills</h3>
+          <h3 className="font-semibold mb-3">Missing Skills</h3>
           <div className="flex flex-wrap gap-2">
             {result.missingSkills.length ? (
               result.missingSkills.map((s) => (
-                <Badge key={s} className="bg-red-500/10 text-red-500 border border-red-500/20">
+                <Badge key={s} variant="outline" className={chipCls}>
                   {s}
                 </Badge>
               ))
@@ -172,19 +173,11 @@ function AnalysisResults({ result, job }: { result: ResumeAnalysisResult; job: A
               <span className="text-sm w-36">{d.name}</span>
               <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
                 <div
-                  className={[
-                    "h-full rounded-full",
-                    d.score >= 7 ? "bg-green-500" : d.score >= 5 ? "bg-yellow-500" : "bg-red-500",
-                  ].join(" ")}
+                  className="h-full rounded-full bg-purple-500"
                   style={{ width: `${d.score * 10}%` }}
                 />
               </div>
-              <span
-                className={[
-                  "text-sm font-medium w-10 tabular-nums",
-                  d.score >= 7 ? "text-green-500" : d.score >= 5 ? "text-yellow-500" : "text-red-500",
-                ].join(" ")}
-              >
+              <span className="text-sm font-medium w-10 tabular-nums">
                 {d.score.toFixed(1)}
               </span>
             </div>
@@ -196,7 +189,7 @@ function AnalysisResults({ result, job }: { result: ResumeAnalysisResult; job: A
 }
 
 export default function CandidateDashboard() {
-  const location = useLocation() as unknown as { state?: { tab?: string } }
+  const location = useLocation() as unknown as { state?: { tab?: string; reportId?: string } }
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
   const isDark = theme === "dark"
@@ -230,18 +223,6 @@ export default function CandidateDashboard() {
   const [selectedJob, setSelectedJob] = useState<AppliedJob | null>(null)
   const [analyzing, setAnalyzing] = useState(false)
   const [analysisResult, setAnalysisResult] = useState<ResumeAnalysisResult | null>(null)
-
-  const tabTitles: Record<Tab, string> = {
-    overview: "Overview",
-    jobs: "Browse Jobs",
-    resume: "Resume Analysis",
-    interviews: "Voice Interviews",
-    schedule: "Schedule",
-    scores: "Score Dashboard",
-    reports: "My Reports",
-    settings: "Settings",
-    pricing: "Pricing",
-  }
 
   const candidate = useMemo(() => {
     try {
@@ -319,8 +300,13 @@ export default function CandidateDashboard() {
 
   useEffect(() => {
     const next = location.state?.tab
-    if (next === "pricing") setTab("pricing")
-  }, [location.state?.tab])
+    const reportId = location.state?.reportId
+    if (next && Object.prototype.hasOwnProperty.call(TAB_TITLES, next)) setTab(next as Tab)
+    if (reportId) {
+      setTab("reports")
+      void loadReport(String(reportId))
+    }
+  }, [location.state?.tab, location.state?.reportId])
 
   useEffect(() => {
     setProfileName(candidate.name ?? "")
@@ -429,7 +415,7 @@ export default function CandidateDashboard() {
         const arr: unknown[] =
           Array.isArray(data) ? data : Array.isArray((data as { interviews?: unknown[] } | null)?.interviews) ? (data as { interviews: unknown[] }).interviews : []
 
-        const mine: InterviewItem[] = arr
+        const mineUnfiltered: InterviewItem[] = arr
           .map((item) => (item && typeof item === "object" ? (item as Record<string, unknown>) : {}))
           .map((r) => ({
             id: String(r.id ?? ""),
@@ -445,6 +431,33 @@ export default function CandidateDashboard() {
           }))
           .filter((iv) => iv.id && iv.candidate_id && iv.job_role)
           .filter((iv) => (candidateId ? iv.candidate_id === candidateId : true))
+
+        const jobRes = await fetch("http://localhost:8000/api/jobs?all=true", { headers, signal: controller.signal })
+        const jobsData = (await jobRes.json().catch(() => [])) as unknown
+        const jobsRaw: unknown[] = Array.isArray(jobsData) ? jobsData : []
+        const jobsAll = jobsRaw
+          .map((x) => (x && typeof x === "object" ? (x as Record<string, unknown>) : null))
+          .filter((x): x is Record<string, unknown> => Boolean(x))
+        const invalidJobStatuses = new Set(["closed", "deleted", "inactive"])
+        const jobById = new Map(jobsAll.map((j) => [String(j.id ?? ""), j]))
+
+        let mine = mineUnfiltered.filter((iv) => {
+          if (!iv.job_id) return true
+          const job = jobById.get(iv.job_id)
+          if (!job) return false
+          const st = String(job.status ?? "").toLowerCase()
+          if (!st) return true
+          if (invalidJobStatuses.has(st)) return false
+          return st === "active"
+        })
+
+        try {
+          const raw = localStorage.getItem("sage_demo_interview_ids") || "[]"
+          const demoIds = new Set((JSON.parse(raw) as unknown[]).filter((x): x is string => typeof x === "string"))
+          mine = mine.filter((iv) => !demoIds.has(iv.id))
+        } catch {
+          // ignore
+        }
 
         if (cancelled) return
         setInterviews(mine)
@@ -483,7 +496,7 @@ export default function CandidateDashboard() {
       window.clearTimeout(timeout)
       controller.abort()
     }
-  }, [candidateId, candidate.resume_parsed])
+  }, [candidateId, candidate.resume_parsed, tab])
 
   useEffect(() => {
     if (tab !== "jobs") return
@@ -534,9 +547,16 @@ export default function CandidateDashboard() {
         const allInterviews = interviewsRaw
           .map((x) => (x && typeof x === "object" ? (x as Record<string, unknown>) : null))
           .filter((x): x is Record<string, unknown> => Boolean(x))
-        const myInterviews = cid
+        let myInterviews = cid
           ? allInterviews.filter((i) => String(i.candidate_id ?? "") === String(cid))
           : []
+        try {
+          const raw = localStorage.getItem("sage_demo_interview_ids") || "[]"
+          const demoIds = new Set((JSON.parse(raw) as unknown[]).filter((x): x is string => typeof x === "string"))
+          myInterviews = myInterviews.filter((i) => !demoIds.has(String(i.id ?? "")))
+        } catch {
+          // ignore
+        }
 
         const jobRes = await fetch("http://localhost:8000/api/jobs?all=true")
         const jobsData = (await jobRes.json().catch(() => [])) as unknown
@@ -545,26 +565,32 @@ export default function CandidateDashboard() {
           .map((x) => (x && typeof x === "object" ? (x as Record<string, unknown>) : null))
           .filter((x): x is Record<string, unknown> => Boolean(x))
 
-        const applied: AppliedJob[] = myInterviews.map((interview) => {
-          const matchedJob =
-            jobsAll.find((j) => String(j.id ?? "") === String(interview.job_id ?? "")) ||
-            jobsAll.find((j) => String(j.job_role ?? "") === String(interview.job_role ?? ""))
-          return {
-            interview_id: String(interview.id ?? ""),
-            job_id: typeof interview.job_id === "string" ? (interview.job_id as string) : null,
-            job_role: String(interview.job_role ?? ""),
-            company: String(matchedJob?.company_name ?? interview.company ?? "—"),
-            job_title: String(matchedJob?.job_title ?? interview.job_role ?? "—"),
-            job_description: String(matchedJob?.job_description ?? ""),
-            requirements: String(matchedJob?.requirements ?? ""),
-            status: String(interview.status ?? ""),
-            score: typeof interview.overall_score === "number" ? (interview.overall_score as number) : null,
-          }
-        })
+        const invalidJobStatuses = new Set(["closed", "deleted", "inactive"])
+        const applied: AppliedJob[] = myInterviews
+          .map((interview) => {
+            const matchedJob =
+              jobsAll.find((j) => String(j.id ?? "") === String(interview.job_id ?? "")) ||
+              jobsAll.find((j) => String(j.job_role ?? "") === String(interview.job_role ?? ""))
+            if (!matchedJob) return null
+            const st = String(matchedJob.status ?? "").toLowerCase()
+            if (st && (invalidJobStatuses.has(st) || st !== "active")) return null
+            return {
+              interview_id: String(interview.id ?? ""),
+              job_id: typeof interview.job_id === "string" ? (interview.job_id as string) : null,
+              job_role: String(interview.job_role ?? ""),
+              company: String(matchedJob.company_name ?? interview.company ?? "—"),
+              job_title: String(matchedJob.job_title ?? interview.job_role ?? "—"),
+              job_description: String(matchedJob.job_description ?? ""),
+              requirements: String(matchedJob.requirements ?? ""),
+              status: String(interview.status ?? ""),
+              score: typeof interview.overall_score === "number" ? (interview.overall_score as number) : null,
+            } satisfies AppliedJob
+          })
+          .filter((x): x is AppliedJob => x !== null)
 
         if (cancelled) return
         setAppliedJobs(applied)
-        setSelectedJob((prev) => (prev ? prev : applied.length > 0 ? applied[0] : null))
+        setSelectedJob((prev) => (prev && applied.some((j) => j.interview_id === prev.interview_id) ? prev : applied.length > 0 ? applied[0] : null))
       } catch (e) {
         console.error("Failed to fetch applied jobs:", e)
         if (cancelled) return
@@ -669,6 +695,7 @@ export default function CandidateDashboard() {
   }
 
   const upcomingInterviews = useMemo(() => {
+    const today = new Date().toISOString().split("T")[0]
     return interviews
       .filter((iv) => iv.status === "pending" || iv.status === "in_progress")
       .slice()
@@ -676,13 +703,16 @@ export default function CandidateDashboard() {
       .slice(0, 5)
       .map((iv) => {
         const when = iv.scheduled_at ?? iv.created_at
+        const scheduledDate = iv.scheduled_at ? String(iv.scheduled_at).split("T")[0] : null
+        const isAvailableToday = scheduledDate ? scheduledDate === today : true
         const status: UpcomingInterview["status"] = iv.status === "in_progress" ? "In Progress" : "Pending"
         return {
           id: iv.id,
           role: iv.job_role,
           date: formatDay(when),
-          time: formatTime(when),
+          time: iv.scheduled_at ? "Anytime" : formatTime(when),
           status,
+          isAvailableToday,
         }
       })
   }, [interviews])
@@ -767,6 +797,31 @@ export default function CandidateDashboard() {
     return new Set(interviews.map((iv) => iv.job_role).filter(Boolean))
   }, [interviews])
 
+  const completedScoredInterviews = useMemo(() => {
+    return interviews.filter((i) => i.status === "completed" && typeof i.overall_score === "number" && i.overall_score > 0)
+  }, [interviews])
+
+  const completedCount = completedScoredInterviews.length
+
+  const interviewScores = useMemo(() => {
+    return completedScoredInterviews.map((i) => i.overall_score || 0)
+  }, [completedScoredInterviews])
+
+  const readinessScore = useMemo(() => {
+    if (completedCount === 0) return 0
+    const avg = completedScoredInterviews.reduce((s, i) => s + (i.overall_score || 0), 0) / completedCount
+    return Math.round(avg * 10)
+  }, [completedCount, completedScoredInterviews])
+
+  const avgScores = useMemo(() => {
+    return {
+      technical: completedCount > 0 ? readinessScore * 0.09 : 0,
+      communication: completedCount > 0 ? readinessScore * 0.08 : 0,
+      relevance: completedCount > 0 ? readinessScore * 0.085 : 0,
+      confidence: completedCount > 0 ? readinessScore * 0.075 : 0,
+    }
+  }, [completedCount, readinessScore])
+
   const handleApply = async (job: JobPosting) => {
     localStorage.setItem("sage_applying_job", JSON.stringify(job))
     navigate("/interview", {
@@ -830,6 +885,11 @@ export default function CandidateDashboard() {
                   <FileText className="w-4 h-4" /> My Reports
                 </SidebarMenuButton>
               </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton isActive={tab === "coach"} onClick={() => setTab("coach")}>
+                  <GraduationCap className="w-4 h-4" /> AI Coach
+                </SidebarMenuButton>
+              </SidebarMenuItem>
             </SidebarMenu>
           </SidebarGroup>
 
@@ -864,7 +924,7 @@ export default function CandidateDashboard() {
       <SidebarInset>
         <header className="flex h-14 items-center gap-2 border-b px-4">
           <SidebarTrigger />
-          <h1 className="font-semibold">{tabTitles[tab]}</h1>
+          <h1 className="font-semibold">{TAB_TITLES[tab]}</h1>
           <div className="ml-auto">
             <Button type="button" size="icon" variant="outline" onClick={toggleTheme}>
               {isDark ? <Sun size={16} /> : <Moon size={16} />}
@@ -899,33 +959,42 @@ export default function CandidateDashboard() {
               </div>
 
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                <div className="rounded-xl border p-5 relative overflow-hidden text-center">
-                  <Mic className={["absolute -right-2 -top-2 w-16 h-16 opacity-5", isDark ? "text-white" : "text-black"].join(" ")} />
-                  <div className={["text-base font-semibold", isDark ? "text-white" : "text-black"].join(" ")}>Interviews</div>
+                <div
+                  className={[
+                    "rounded-xl border p-5 relative overflow-hidden text-center",
+                    isDark ? "bg-zinc-900 border-zinc-800 text-white" : "bg-white border-gray-200 text-black",
+                  ].join(" ")}
+                >
+                  <Mic className="absolute -right-2 -top-2 w-16 h-16 opacity-5 text-current" />
+                  <div className="text-base font-semibold">Interviews</div>
                   <div className="text-2xl font-semibold mt-2">{loading ? "—" : String(stats.total)}</div>
-                  <div className="text-xs text-green-400 mt-2">+{weeklyCounts.totalThisWeek} this week</div>
+                  <div className="text-xs text-muted-foreground mt-2">+{weeklyCounts.totalThisWeek} this week</div>
                 </div>
 
-                <div className="rounded-xl border p-5 relative overflow-hidden text-center">
-                  <CheckCircle className={["absolute -right-2 -top-2 w-16 h-16 opacity-5", isDark ? "text-white" : "text-black"].join(" ")} />
-                  <div className={["text-base font-semibold", isDark ? "text-white" : "text-black"].join(" ")}>Completed</div>
+                <div
+                  className={[
+                    "rounded-xl border p-5 relative overflow-hidden text-center",
+                    isDark ? "bg-zinc-900 border-zinc-800 text-white" : "bg-white border-gray-200 text-black",
+                  ].join(" ")}
+                >
+                  <CheckCircle className="absolute -right-2 -top-2 w-16 h-16 opacity-5 text-current" />
+                  <div className="text-base font-semibold">Completed</div>
                   <div className="text-2xl font-semibold mt-2">{loading ? "—" : String(stats.completed)}</div>
-                  <div className="text-xs text-green-400 mt-2">+{weeklyCounts.completedThisWeek} this week</div>
+                  <div className="text-xs text-muted-foreground mt-2">+{weeklyCounts.completedThisWeek} this week</div>
                 </div>
 
-                <div className="rounded-xl border p-5 relative overflow-hidden text-center">
-                  <BarChart3 className={["absolute -right-2 -top-2 w-16 h-16 opacity-5", isDark ? "text-white" : "text-black"].join(" ")} />
-                  <div className={["text-base font-semibold", isDark ? "text-white" : "text-black"].join(" ")}>Avg Score</div>
+                <div
+                  className={[
+                    "rounded-xl border p-5 relative overflow-hidden text-center",
+                    isDark ? "bg-zinc-900 border-zinc-800 text-white" : "bg-white border-gray-200 text-black",
+                  ].join(" ")}
+                >
+                  <BarChart3 className="absolute -right-2 -top-2 w-16 h-16 opacity-5 text-current" />
+                  <div className="text-base font-semibold">Avg Score</div>
                   <div
                     className={[
                       "text-2xl font-semibold mt-2",
-                      stats.avgScore === null
-                        ? "text-muted-foreground"
-                        : stats.avgScore >= 7.5
-                          ? "text-green-500"
-                          : stats.avgScore >= 5
-                            ? "text-amber-500"
-                            : "text-red-500",
+                      stats.avgScore === null ? "text-muted-foreground" : "",
                     ].join(" ")}
                   >
                     {loading ? "—" : stats.avgScore === null ? "—" : `${stats.avgScore.toFixed(1)}/10`}
@@ -935,9 +1004,14 @@ export default function CandidateDashboard() {
                   </div>
                 </div>
 
-                <div className="rounded-xl border p-5 relative overflow-hidden text-center">
-                  <TrendingUp className={["absolute -right-2 -top-2 w-16 h-16 opacity-5", isDark ? "text-white" : "text-black"].join(" ")} />
-                  <div className={["text-base font-semibold", isDark ? "text-white" : "text-black"].join(" ")}>Resume Score</div>
+                <div
+                  className={[
+                    "rounded-xl border p-5 relative overflow-hidden text-center",
+                    isDark ? "bg-zinc-900 border-zinc-800 text-white" : "bg-white border-gray-200 text-black",
+                  ].join(" ")}
+                >
+                  <TrendingUp className="absolute -right-2 -top-2 w-16 h-16 opacity-5 text-current" />
+                  <div className="text-base font-semibold">Resume Score</div>
                   <div className="text-2xl font-semibold mt-2">
                     {loading ? "—" : stats.resumeScore === null ? "—" : `${stats.resumeScore}%`}
                   </div>
@@ -954,7 +1028,7 @@ export default function CandidateDashboard() {
                     <Button
                       size="sm"
                       variant="outline"
-                      className={isDark ? "border-zinc-700 text-white hover:bg-white/10" : "border-gray-300 text-gray-900 hover:bg-gray-50"}
+                      className={isDark ? "bg-white text-black hover:bg-white/90 border border-white" : "bg-black text-white hover:bg-black/90 border border-black"}
                       onClick={() => setTab("interviews")}
                     >
                       View All
@@ -969,7 +1043,7 @@ export default function CandidateDashboard() {
                         <Button
                           size="sm"
                           variant="outline"
-                          className={isDark ? "border-zinc-700 text-white hover:bg-white/10" : "border-gray-300 text-gray-900 hover:bg-gray-50"}
+                          className={isDark ? "bg-white text-black hover:bg-white/90 border border-white" : "bg-black text-white hover:bg-black/90 border border-black"}
                           onClick={() => window.location.reload()}
                         >
                           Retry
@@ -991,39 +1065,35 @@ export default function CandidateDashboard() {
                         <TableHeader>
                           <TableRow>
                             <TableHead>Role</TableHead>
-                            <TableHead>Date</TableHead>
-                            <TableHead>Time</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead>Action</TableHead>
+                            <TableHead className="text-center">Date</TableHead>
+                            <TableHead className="text-center">Time</TableHead>
+                            <TableHead className="text-center">Status</TableHead>
+                            <TableHead className="text-center">Action</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {upcomingInterviews.map((iv) => {
-                            const badgeCls =
-                              iv.status === "In Progress"
-                                ? isDark
-                                  ? "bg-blue-500/15 text-blue-300 border-blue-500/25"
-                                  : "bg-blue-100 text-blue-700 border-blue-200"
-                                : isDark
-                                  ? "bg-yellow-500/15 text-yellow-300 border-yellow-500/25"
-                                  : "bg-yellow-100 text-yellow-700 border-yellow-200"
+                            const badgeCls = isDark
+                              ? "border-white text-white bg-transparent"
+                              : "border-black text-black bg-transparent"
                             return (
                               <TableRow key={iv.id}>
                                 <TableCell className="font-medium">{iv.role}</TableCell>
-                                <TableCell className="whitespace-nowrap tabular-nums">{iv.date}</TableCell>
-                                <TableCell className="whitespace-nowrap tabular-nums">{iv.time}</TableCell>
-                                <TableCell>
+                                <TableCell className="whitespace-nowrap tabular-nums text-center">{iv.date}</TableCell>
+                                <TableCell className="whitespace-nowrap tabular-nums text-center">{iv.time}</TableCell>
+                                <TableCell className="text-center">
                                   <Badge variant="outline" className={badgeCls}>
-                                    {iv.status}
+                                    {iv.status === "Pending" ? (iv.isAvailableToday ? "Available Today" : "Upcoming") : iv.status}
                                   </Badge>
                                 </TableCell>
-                                <TableCell>
+                                <TableCell className="text-center">
                                   <Button
                                     size="sm"
-                                    className={isDark ? "bg-white text-black hover:bg-white/90 border-white" : "bg-black text-white hover:bg-black/90 border-black"}
+                                    disabled={!iv.isAvailableToday}
+                                    className={isDark ? "bg-white text-black hover:bg-white/90 border border-white" : "bg-black text-white hover:bg-black/90 border border-black"}
                                     onClick={() => setTab("interviews")}
                                   >
-                                    Start
+                                    {iv.isAvailableToday ? "Start" : "Not Available"}
                                   </Button>
                                 </TableCell>
                               </TableRow>
@@ -1359,7 +1429,11 @@ export default function CandidateDashboard() {
                   {reportRows.length === 0 ? (
                     <div className="flex items-center justify-between gap-4 flex-wrap">
                       <div className="text-sm text-muted-foreground">No interviews yet</div>
-                      <Button size="sm" onClick={() => setTab("interviews")}>
+                      <Button
+                        size="sm"
+                        className={isDark ? "bg-white text-black hover:bg-white/90 border border-white" : "bg-black text-white hover:bg-black/90 border border-black"}
+                        onClick={() => setTab("interviews")}
+                      >
                         Start your first assessment
                       </Button>
                     </div>
@@ -1368,34 +1442,27 @@ export default function CandidateDashboard() {
                       <TableHeader>
                         <TableRow>
                           <TableHead>Role</TableHead>
-                          <TableHead>Date</TableHead>
-                          <TableHead>Overall Score</TableHead>
-                          <TableHead>Status</TableHead>
-                          <TableHead>Action</TableHead>
+                          <TableHead className="text-center">Date</TableHead>
+                          <TableHead className="text-center">Overall Score</TableHead>
+                          <TableHead className="text-center">Status</TableHead>
+                          <TableHead className="text-center">Action</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
                         {filteredReports.map((r) => {
-                          const statusCls =
-                            r.status === "Hired"
-                              ? isDark
-                                ? "bg-green-500/15 text-green-300 border-green-500/25"
-                                : "bg-green-100 text-green-700 border-green-200"
-                              : isDark
-                                ? "bg-blue-500/15 text-blue-300 border-blue-500/25"
-                                : "bg-blue-100 text-blue-700 border-blue-200"
+                          const statusCls = isDark ? "border-white text-white bg-transparent" : "border-black text-black bg-transparent"
 
                           return (
                             <TableRow key={r.id}>
                               <TableCell className="font-medium">{r.role}</TableCell>
-                              <TableCell>{r.date}</TableCell>
-                              <TableCell className="tabular-nums">{r.score.toFixed(1)}/10</TableCell>
-                              <TableCell>
+                              <TableCell className="text-center tabular-nums">{r.date}</TableCell>
+                              <TableCell className="text-center tabular-nums">{r.score.toFixed(1)}/10</TableCell>
+                              <TableCell className="text-center">
                                 <Badge variant="outline" className={statusCls}>
                                   {r.status}
                                 </Badge>
                               </TableCell>
-                              <TableCell>
+                              <TableCell className="text-center">
                                 <Button
                                   size="sm"
                                   variant="outline"
@@ -1499,6 +1566,167 @@ export default function CandidateDashboard() {
                   <div className="text-sm text-muted-foreground">Report not available.</div>
                 </Card>
               ) : null}
+            </div>
+          ) : null}
+
+          {tab === "coach" ? (
+            <div className="space-y-6 max-w-5xl">
+              <div>
+                <h2 className="text-2xl font-semibold">AI Interview Coach</h2>
+                <p className="text-muted-foreground">Personalized improvement plan based on your interview performance</p>
+              </div>
+
+              <Card className="p-6">
+                <h3 className="font-semibold mb-4">Your Interview Readiness</h3>
+                <div className="flex items-center gap-6 flex-wrap">
+                  <div className="relative w-32 h-32">
+                    <svg className="w-32 h-32 -rotate-90" viewBox="0 0 120 120">
+                      <circle cx="60" cy="60" r="50" fill="none" stroke="currentColor" strokeWidth="8" className="text-muted-foreground/30" />
+                      <circle
+                        cx="60"
+                        cy="60"
+                        r="50"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="8"
+                        className="text-purple-500"
+                        strokeDasharray={`${readinessScore * 3.14} 314`}
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-2xl font-bold">{readinessScore}%</span>
+                    </div>
+                  </div>
+                  <div className="flex-1 space-y-2 min-w-[220px]">
+                    <p className="font-medium">
+                      {readinessScore >= 80
+                        ? "Interview Ready!"
+                        : readinessScore >= 60
+                          ? "Getting There"
+                          : readinessScore >= 40
+                            ? "Needs Practice"
+                            : "Just Starting"}
+                    </p>
+                    <p className="text-sm text-muted-foreground">Based on {completedCount} completed interviews</p>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-6">
+                <h3 className="font-semibold mb-4">Skill Improvement Areas</h3>
+                <div className="space-y-4">
+                  {[
+                    {
+                      skill: "Technical Depth",
+                      score: avgScores.technical,
+                      tip: "Practice explaining your project architecture decisions. Use the STAR method for technical scenarios.",
+                      Icon: Code,
+                    },
+                    {
+                      skill: "Communication",
+                      score: avgScores.communication,
+                      tip: "Speak in shorter sentences. Pause between points. Avoid filler words like 'um' and 'basically'.",
+                      Icon: MessageCircle,
+                    },
+                    {
+                      skill: "Relevance",
+                      score: avgScores.relevance,
+                      tip: "Listen carefully to the question. Address exactly what's asked before adding context.",
+                      Icon: Target,
+                    },
+                    {
+                      skill: "Confidence",
+                      score: avgScores.confidence,
+                      tip: "Maintain steady pace. Avoid apologizing for answers. Own your experience.",
+                      Icon: Shield,
+                    },
+                  ].map(({ skill, score, tip, Icon }) => (
+                    <div key={skill} className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-2 gap-3">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded-full bg-purple-500/10 flex items-center justify-center">
+                            <Icon className="w-4 h-4 text-purple-500" />
+                          </div>
+                          <span className="font-medium">{skill}</span>
+                        </div>
+                        <span className={["font-bold tabular-nums", completedCount > 0 ? "" : "text-muted-foreground"].join(" ")}>
+                          {completedCount > 0 ? `${score.toFixed(1)}/10` : "—/10"}
+                        </span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden mb-2">
+                        <div
+                          className="h-full rounded-full bg-purple-500"
+                          style={{ width: `${(completedCount > 0 ? score : 0) * 10}%` }}
+                        />
+                      </div>
+                      <p className="text-sm text-muted-foreground">💡 {tip}</p>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+
+              <Card className="p-6">
+                <h3 className="font-semibold mb-4">Recommended Practice</h3>
+                <div className="space-y-3">
+                  <div className="flex items-start gap-3 p-3 rounded-lg border">
+                    <div className="w-8 h-8 rounded-full bg-purple-500/10 flex items-center justify-center flex-shrink-0">
+                      <Mic className="w-4 h-4 text-purple-500" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">Practice Mock Interview</p>
+                      <p className="text-xs text-muted-foreground">Take another interview to improve your weak areas</p>
+                    </div>
+                    <Button size="sm" className={["ml-auto", isDark ? "bg-white text-black hover:bg-white/90 border border-white" : "bg-black text-white hover:bg-black/90 border border-black"].join(" ")} onClick={() => setTab("interviews")}>
+                      Start
+                    </Button>
+                  </div>
+                  <div className="flex items-start gap-3 p-3 rounded-lg border">
+                    <div className="w-8 h-8 rounded-full bg-purple-500/10 flex items-center justify-center flex-shrink-0">
+                      <FileSearch className="w-4 h-4 text-purple-500" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">Optimize Your Resume</p>
+                      <p className="text-xs text-muted-foreground">Improve ATS score to get more interview calls</p>
+                    </div>
+                    <Button size="sm" className={["ml-auto", isDark ? "bg-white text-black hover:bg-white/90 border border-white" : "bg-black text-white hover:bg-black/90 border border-black"].join(" ")} onClick={() => setTab("resume")}>
+                      Analyze
+                    </Button>
+                  </div>
+                  <div className="flex items-start gap-3 p-3 rounded-lg border">
+                    <div className="w-8 h-8 rounded-full bg-purple-500/10 flex items-center justify-center flex-shrink-0">
+                      <BookOpen className="w-4 h-4 text-purple-500" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">Review Past Answers</p>
+                      <p className="text-xs text-muted-foreground">See what you said and how to improve it</p>
+                    </div>
+                    <Button size="sm" className={["ml-auto", isDark ? "bg-white text-black hover:bg-white/90 border border-white" : "bg-black text-white hover:bg-black/90 border border-black"].join(" ")} onClick={() => setTab("reports")}>
+                      Review
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+
+              <Card className="p-6">
+                <h3 className="font-semibold mb-4">Score Trend</h3>
+                <p className="text-sm text-muted-foreground mb-4">Your performance across interviews</p>
+                <div className="h-40 flex items-end gap-2">
+                  {interviewScores.map((score, i) => (
+                    <div key={i} className="flex-1 flex flex-col items-center gap-1">
+                      <span className="text-xs tabular-nums">{score.toFixed(1)}</span>
+                      <div
+                        className="w-full rounded-t bg-purple-500"
+                        style={{ height: `${Math.max(0, Math.min(100, score * 10))}%` }}
+                      />
+                      <span className="text-xs text-muted-foreground">#{i + 1}</span>
+                    </div>
+                  ))}
+                  {interviewScores.length === 0 ? (
+                    <p className="text-muted-foreground text-sm w-full text-center py-8">Complete interviews to see your trend</p>
+                  ) : null}
+                </div>
+              </Card>
             </div>
           ) : null}
 

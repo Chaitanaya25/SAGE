@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import os
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -12,8 +13,12 @@ from fastapi import WebSocket, WebSocketDisconnect
 from agents import evaluator
 from database import (
     get_all_interviews,
+    get_candidate,
     get_questions,
+    get_report,
+    get_responses,
     update_interview,
+    save_report,
     save_response,
 )
 
@@ -255,7 +260,90 @@ async def interview_websocket(websocket: WebSocket, candidate_id: str) -> None:
                     await websocket.send_json(
                         {"type": "complete", "message": "Interview complete. Thank you!"}
                     )
-                    await update_interview(interview_id, {"status": "completed"})
+                    resume_parsed: Dict[str, Any] = {}
+                    try:
+                        candidate = await get_candidate(candidate_id)
+                        if candidate and isinstance(candidate.get("resume_parsed"), dict):
+                            resume_parsed = candidate.get("resume_parsed") or {}
+                    except Exception as e:
+                        logger.error("Failed to load resume_parsed: %s", e)
+
+                    try:
+                        existing_report = await get_report(interview_id)
+                    except Exception:
+                        existing_report = None
+
+                    aggregated: Dict[str, Any] = {}
+                    overall_score = 0.0
+                    try:
+                        aggregated = await evaluator.evaluate_full_interview(
+                            responses_collected, resume_parsed, job_role
+                        )
+                        overall_score = float(aggregated.get("overall_score") or 0.0)
+                    except Exception as e:
+                        logger.error("Full interview evaluation failed: %s", e)
+                        aggregated = {}
+                        overall_score = 0.0
+
+                    if not existing_report:
+                        avg_scores = aggregated.get("average_scores") or {}
+                        tech = float(avg_scores.get("technical_depth") or 0)
+                        comm = float(avg_scores.get("communication") or 0)
+                        rel = float(avg_scores.get("relevance") or 0)
+                        conf = float(avg_scores.get("confidence") or 0)
+
+                        recommendation = "MAYBE"
+                        if overall_score >= 7.0 and min(tech, comm, rel, conf) >= 5.0:
+                            recommendation = "HIRE"
+                        elif overall_score < 5.5 or min(tech, comm, rel, conf) < 4.0:
+                            recommendation = "NO_HIRE"
+
+                        strengths: List[str] = []
+                        weaknesses: List[str] = []
+                        strongest = aggregated.get("strongest_answer") or {}
+                        weakest = aggregated.get("weakest_answer") or {}
+                        if strongest.get("question"):
+                            strengths.append(f"Strong answer on: {strongest.get('question')}")
+                        if weakest.get("question"):
+                            weaknesses.append(f"Needs improvement on: {weakest.get('question')}")
+
+                        if not strengths:
+                            strengths = ["Clear attempt to answer interview questions", "Maintained structure across responses"]
+                        if not weaknesses:
+                            weaknesses = ["Improve clarity and completeness of answers", "Provide more concrete examples"]
+
+                        summary = (
+                            f"Overall score: {overall_score:.1f}/10.\n\n"
+                            f"Average scores — Technical: {tech:.1f}, Communication: {comm:.1f}, Relevance: {rel:.1f}, Confidence: {conf:.1f}.\n\n"
+                            "This report was generated immediately after the interview using SAGE's scoring model."
+                        )
+
+                        try:
+                            await save_report(
+                                {
+                                    "interview_id": interview_id,
+                                    "overall_score": overall_score,
+                                    "scores_json": aggregated,
+                                    "strengths": strengths,
+                                    "weaknesses": weaknesses,
+                                    "recommendation": recommendation,
+                                    "summary": summary,
+                                    "suggested_follow_up": [],
+                                }
+                            )
+                        except Exception as e:
+                            logger.error("Failed to save report: %s", e)
+
+                    update_payload: Dict[str, Any] = {
+                        "status": "completed",
+                        "completed_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                    if overall_score:
+                        update_payload["overall_score"] = overall_score
+                    try:
+                        await update_interview(interview_id, update_payload)
+                    except Exception as e:
+                        logger.error("Failed to update interview completion: %s", e)
                     await websocket.close()
 
                     from pipeline import run_post_interview_pipeline

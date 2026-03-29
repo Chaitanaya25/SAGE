@@ -57,18 +57,7 @@ function scoreColor(score: number | null) {
 function StatusBadge({ status }: { status: CandidateRow["status"] }) {
   const { theme } = useTheme()
   const isDark = theme === "dark"
-  const cls =
-    status === "Evaluated"
-      ? isDark
-        ? "bg-green-500/15 text-green-300 border-green-500/25"
-        : "bg-green-100 text-green-700 border-green-200"
-      : status === "In Progress"
-      ? isDark
-        ? "bg-blue-500/15 text-blue-300 border-blue-500/25"
-        : "bg-blue-100 text-blue-700 border-blue-200"
-      : isDark
-        ? "bg-yellow-500/15 text-yellow-300 border-yellow-500/25"
-        : "bg-yellow-100 text-yellow-700 border-yellow-200"
+  const cls = isDark ? "border-white text-white bg-transparent" : "border-black text-black bg-transparent"
   return (
     <Badge variant="outline" className={["text-xs font-medium px-2 py-0.5", cls].join(" ")}>
       {status}
@@ -290,7 +279,7 @@ export default function Dashboard() {
         const rawScore = (interview as unknown as { overall_score?: unknown }).overall_score
         const score = typeof rawScore === "number" && rawScore > 0 ? rawScore : null
         const status: CandidateRow["status"] =
-          interview.status === "completed" && score !== null
+          interview.status === "completed"
             ? "Evaluated"
             : interview.status === "in_progress"
               ? "In Progress"
@@ -306,7 +295,7 @@ export default function Dashboard() {
           date: formatDate(interview.created_at),
         } satisfies CandidateRow
       })
-      .filter((r) => r.score !== null)
+      .filter((r) => r.status === "Evaluated")
   }, [candidates, interviews, jobPostings])
 
   const filtered = useMemo(() => {
@@ -320,6 +309,10 @@ export default function Dashboard() {
         r.role.toLowerCase().includes(q)
     )
   }, [query, tableData])
+
+  const visibleJobPostings = useMemo(() => {
+    return jobPostings.filter((j) => String(j.status ?? "active").toLowerCase() !== "deleted")
+  }, [jobPostings])
 
   return (
     <div className={["min-h-screen flex", pageBg, textMain].join(" ")}>
@@ -522,8 +515,8 @@ export default function Dashboard() {
               </div>
             </Card>
 
-            <Card className={["mt-4 p-6 rounded-xl", cardBg, "border-red-500/20"].join(" ")}>
-              <h3 className="font-semibold text-red-500 mb-4">Danger Zone</h3>
+            <Card className={["mt-4 p-6 rounded-xl", cardBg].join(" ")}>
+              <h3 className="font-semibold mb-4">Danger Zone</h3>
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <p className="text-sm font-medium">Delete Account</p>
@@ -531,7 +524,12 @@ export default function Dashboard() {
                     Permanently delete your account and all data
                   </p>
                 </div>
-                <Button variant="destructive" size="sm" onClick={() => console.log("Delete account")}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className={isDark ? "bg-white text-black hover:bg-white/90 border border-white" : "bg-black text-white hover:bg-black/90 border border-black"}
+                  onClick={() => console.log("Delete account")}
+                >
                   Delete
                 </Button>
               </div>
@@ -743,7 +741,7 @@ export default function Dashboard() {
             ) : (
               <div className="space-y-4">
                 {(jobsQuery.trim()
-                  ? jobPostings.filter((j) => {
+                  ? visibleJobPostings.filter((j) => {
                       const q = jobsQuery.trim().toLowerCase()
                       return (
                         String(j.job_title ?? "").toLowerCase().includes(q) ||
@@ -751,14 +749,14 @@ export default function Dashboard() {
                         String(j.company_name ?? "").toLowerCase().includes(q)
                       )
                     })
-                  : jobPostings
+                  : visibleJobPostings
                 ).length === 0 ? (
                   <Card className={["p-6 rounded-xl", cardBg].join(" ")}>
                     <div className={["text-sm", textMuted].join(" ")}>No job postings yet.</div>
                   </Card>
                 ) : (
                   (jobsQuery.trim()
-                    ? jobPostings.filter((j) => {
+                    ? visibleJobPostings.filter((j) => {
                         const q = jobsQuery.trim().toLowerCase()
                         return (
                           String(j.job_title ?? "").toLowerCase().includes(q) ||
@@ -766,18 +764,11 @@ export default function Dashboard() {
                           String(j.company_name ?? "").toLowerCase().includes(q)
                         )
                       })
-                    : jobPostings
+                    : visibleJobPostings
                   ).map((job) => {
                     const applicants = interviews.filter((iv) => String((iv as unknown as { job_id?: unknown }).job_id ?? "") === job.id).length
                     const status = String(job.status ?? "active")
-                    const statusCls =
-                      status === "closed"
-                        ? isDark
-                          ? "bg-zinc-800 text-zinc-200 border-zinc-700"
-                          : "bg-gray-100 text-gray-700 border-gray-200"
-                        : isDark
-                          ? "bg-green-500/15 text-green-300 border-green-500/25"
-                          : "bg-green-100 text-green-700 border-green-200"
+                    const statusCls = isDark ? "border-white text-white bg-transparent" : "border-black text-black bg-transparent"
                     return (
                       <Card key={job.id} className={["p-6 rounded-xl", cardBg].join(" ")}>
                         <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -806,7 +797,7 @@ export default function Dashboard() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className={isDark ? "border-zinc-700 text-white hover:bg-white/10" : "border-gray-300 text-gray-900 hover:bg-gray-50"}
+                              className={isDark ? "bg-white text-black hover:bg-white/90 border border-white" : "bg-black text-white hover:bg-black/90 border border-black"}
                               onClick={() => {
                                 setJobFormError(null)
                                 setJobFormSuccess(null)
@@ -832,7 +823,7 @@ export default function Dashboard() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className={isDark ? "border-zinc-700 text-white hover:bg-white/10" : "border-gray-300 text-gray-900 hover:bg-gray-50"}
+                              className={isDark ? "bg-white text-black hover:bg-white/90 border border-white" : "bg-black text-white hover:bg-black/90 border border-black"}
                               disabled={status === "closed"}
                               onClick={() =>
                                 void (async () => {
@@ -845,7 +836,8 @@ export default function Dashboard() {
                             </Button>
                             <Button
                               size="sm"
-                              variant="destructive"
+                              variant="outline"
+                              className={isDark ? "bg-white text-black hover:bg-white/90 border border-white" : "bg-black text-white hover:bg-black/90 border border-black"}
                               onClick={() =>
                                 void (async () => {
                                   await deleteJobPosting(job.id)

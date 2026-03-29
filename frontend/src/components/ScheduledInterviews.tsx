@@ -7,7 +7,7 @@ export type ScheduledInterview = {
   id: string
   company: string
   role: string
-  status: "Confirmed" | "Pending" | "Completed"
+  status: "Available Today" | "Upcoming" | "Expired" | "Completed"
   date: string
   time: string
 }
@@ -19,19 +19,7 @@ export default function ScheduledInterviews({ items }: { items?: ScheduledInterv
   const [fetched, setFetched] = useState<ScheduledInterview[]>([])
 
   function badgeClass(status: string) {
-    if (status === "Confirmed") {
-      return isDark
-        ? "bg-green-500/15 text-green-300 border-green-500/25"
-        : "bg-green-100 text-green-700 border-green-200"
-    }
-    if (status === "Completed") {
-      return isDark
-        ? "bg-blue-500/15 text-blue-300 border-blue-500/25"
-        : "bg-blue-100 text-blue-700 border-blue-200"
-    }
-    return isDark
-      ? "bg-yellow-500/15 text-yellow-300 border-yellow-500/25"
-      : "bg-yellow-100 text-yellow-700 border-yellow-200"
+    return (isDark ? "border-white text-white bg-transparent" : "border-black text-black bg-transparent") + (status ? "" : "")
   }
 
   const rows = useMemo(() => (items ? items : fetched), [items, fetched])
@@ -60,28 +48,62 @@ export default function ScheduledInterviews({ items }: { items?: ScheduledInterv
               return String(r.candidate_id ?? "") === candidateId
             })
           : arr
+        let demoIds: Set<string> | null = null
+        try {
+          const raw = localStorage.getItem("sage_demo_interview_ids") || "[]"
+          demoIds = new Set((JSON.parse(raw) as unknown[]).filter((x): x is string => typeof x === "string"))
+        } catch {
+          demoIds = null
+        }
 
+        const jobRes = await fetch("http://localhost:8000/api/jobs?all=true", { signal: controller.signal })
+        const jobsData = (await jobRes.json().catch(() => [])) as unknown
+        const jobsRaw: unknown[] = Array.isArray(jobsData) ? jobsData : []
+        const jobsAll = jobsRaw
+          .map((x) => (x && typeof x === "object" ? (x as Record<string, unknown>) : null))
+          .filter((x): x is Record<string, unknown> => Boolean(x))
+        const invalidJobStatuses = new Set(["closed", "deleted", "inactive"])
+        const jobById = new Map(jobsAll.map((j) => [String(j.id ?? ""), j]))
+
+        const today = new Date().toISOString().split("T")[0]
         const mapped: ScheduledInterview[] = mine
           .map((x) => (x && typeof x === "object" ? (x as Record<string, unknown>) : {}))
           .map((r) => {
+            if (demoIds && demoIds.has(String(r.id ?? ""))) return null
+            const jobId = r.job_id ? String(r.job_id) : ""
+            const job = jobId ? jobById.get(jobId) : null
+            if (jobId) {
+              if (!job) return null
+              const st = String(job.status ?? "").toLowerCase()
+              if (st && (invalidJobStatuses.has(st) || st !== "active")) return null
+            }
             const scheduledAt = typeof r.scheduled_at === "string" ? r.scheduled_at : ""
             const createdAt = typeof r.created_at === "string" ? r.created_at : ""
             const when = scheduledAt || createdAt
             const d = when ? new Date(when) : null
             const date = d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString("en-US", { month: "short", day: "2-digit", year: "numeric" }) : "—"
-            const time = d && !Number.isNaN(d.getTime()) ? d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "—"
+            const scheduledDate = scheduledAt ? String(scheduledAt).split("T")[0] : ""
+            const time = scheduledAt ? "Anytime" : d && !Number.isNaN(d.getTime()) ? d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "—"
             const statusRaw = String(r.status ?? "").toLowerCase()
-            const status: ScheduledInterview["status"] =
-              statusRaw.includes("complete") ? "Completed" : statusRaw.includes("confirm") ? "Confirmed" : "Pending"
+            const status: ScheduledInterview["status"] = statusRaw.includes("complete")
+              ? "Completed"
+              : !scheduledDate
+                ? "Upcoming"
+                : scheduledDate === today
+                  ? "Available Today"
+                  : today < scheduledDate
+                    ? "Upcoming"
+                    : "Expired"
             return {
               id: String(r.id ?? ""),
-              company: String(r.company ?? "—"),
-              role: String(r.job_role ?? r.role ?? "—"),
+              company: String(job?.company_name ?? r.company ?? "—"),
+              role: String(job?.job_role ?? r.job_role ?? r.role ?? "—"),
               status,
               date,
               time,
             }
           })
+          .filter((x): x is ScheduledInterview => Boolean(x))
           .filter((i) => i.id && i.role !== "—")
 
         setFetched(mapped)
@@ -108,9 +130,9 @@ export default function ScheduledInterviews({ items }: { items?: ScheduledInterv
           <TableRow>
             <TableHead>Company</TableHead>
             <TableHead>Role</TableHead>
-            <TableHead>Date</TableHead>
-            <TableHead>Time</TableHead>
-            <TableHead>Status</TableHead>
+            <TableHead className="text-center">Date</TableHead>
+            <TableHead className="text-center">Time</TableHead>
+            <TableHead className="text-center">Status</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -131,19 +153,10 @@ export default function ScheduledInterviews({ items }: { items?: ScheduledInterv
               <TableRow key={interview.id} className="hover:bg-muted/40">
                 <TableCell className="font-medium">{interview.company}</TableCell>
                 <TableCell>{interview.role}</TableCell>
-                <TableCell>{interview.date}</TableCell>
-                <TableCell>{interview.time}</TableCell>
-                <TableCell>
-                  <Badge
-                    variant={
-                      interview.status === "Confirmed"
-                        ? "default"
-                        : interview.status === "Completed"
-                          ? "secondary"
-                          : "outline"
-                    }
-                    className={badgeClass(interview.status)}
-                  >
+                <TableCell className="text-center tabular-nums">{interview.date}</TableCell>
+                <TableCell className="text-center tabular-nums">{interview.time}</TableCell>
+                <TableCell className="text-center">
+                  <Badge variant="outline" className={badgeClass(interview.status)}>
                     {interview.status}
                   </Badge>
                 </TableCell>

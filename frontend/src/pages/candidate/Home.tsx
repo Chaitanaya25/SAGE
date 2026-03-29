@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react"
-import { Link } from "react-router-dom"
+import { Link, useNavigate } from "react-router-dom"
 import {
   Brain,
+  GraduationCap,
   Mic,
   Shield,
 } from "lucide-react"
@@ -17,6 +18,7 @@ import { Card } from "@/components/ui/card"
 import { useTheme } from "@/lib/theme-context"
 
 export default function Home() {
+  const navigate = useNavigate()
   const { theme } = useTheme()
   const isDark = theme === "dark"
   const pipelineRef = useRef<HTMLDivElement | null>(null)
@@ -32,8 +34,8 @@ export default function Home() {
     isDark ? "bg-zinc-900/60 border-zinc-700/50 text-zinc-50" : "bg-white/70 border-gray-200/50 text-gray-900",
   ].join(" ")
   const outlineCtaClass = isDark
-    ? "bg-white text-black border border-white hover:bg-white/90"
-    : "bg-black text-white border border-black hover:bg-black/90"
+    ? "bg-white text-black hover:bg-white/90 border border-white"
+    : "bg-black text-white hover:bg-black/90 border border-black"
 
   useEffect(() => {
     if (metricsInView) return
@@ -88,25 +90,25 @@ export default function Home() {
                 </span>
               </h1>
               <div className="text-lg text-muted-foreground text-center max-w-2xl mx-auto mt-4">
-                End-to-end candidate screening. Resume parsing, voice interviews, and AI evaluation.
+                The only platform that screens AND coaches. AI-powered interviews with real-time feedback for candidates and instant evaluations for HR teams.
               </div>
-              <div className="mt-8 flex gap-4 justify-center">
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-8">
                 <Button
-                  asChild
                   size="lg"
                   className={
                     isDark ? "bg-white text-black hover:bg-white/90 border border-white" : "bg-black text-white hover:bg-black/90 border border-black"
                   }
+                  onClick={() => navigate("/login")}
                 >
-                  <Link to="/login">Login</Link>
+                  Login
                 </Button>
                 <Button
-                  asChild
                   size="lg"
                   variant="outline"
                   className={outlineCtaClass}
+                  onClick={() => navigate("/login", { state: { signup: true } })}
                 >
-                  <Link to="/login">Sign Up</Link>
+                  Sign Up
                 </Button>
               </div>
             </div>
@@ -209,7 +211,7 @@ export default function Home() {
               falloff="linear"
             />
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto px-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 max-w-5xl mx-auto px-4">
             <Card className={[glassCard, "text-left"].join(" ")}>
               <Mic className="mb-4" color={isDark ? "#7C3AED" : "#2563EB"} size={36} />
               <div className="font-semibold">Zero Bias Screening</div>
@@ -222,6 +224,13 @@ export default function Home() {
               <div className="font-semibold">10x Faster Pipeline</div>
               <div className="mt-2 text-sm text-muted-foreground">
                 From resume upload to hire/no-hire recommendation in under 15 minutes. No scheduling, no coordination.
+              </div>
+            </Card>
+            <Card className={[glassCard, "text-left"].join(" ")}>
+              <GraduationCap className="mb-4" color={isDark ? "#7C3AED" : "#2563EB"} size={36} />
+              <div className="font-semibold">AI Interview Coach</div>
+              <div className="mt-2 text-sm text-muted-foreground">
+                Unlike screening tools, SAGE gives candidates actionable feedback and improvement plans after every interview.
               </div>
             </Card>
             <Card className={[glassCard, "text-left"].join(" ")}>
