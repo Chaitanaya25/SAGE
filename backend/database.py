@@ -300,3 +300,28 @@ async def delete_job_posting(job_id: str) -> bool:
         return bool(rows)
 
     return await asyncio.to_thread(_op)
+
+
+async def get_hr_user_by_email(email: str) -> Optional[Dict[str, Any]]:
+    def _op() -> Optional[Dict[str, Any]]:
+        resp = (
+            _get_supabase()
+            .table("hr_users")
+            .select("*")
+            .eq("email", email)
+            .limit(1)
+            .execute()
+        )
+        rows = resp.data or []
+        return rows[0] if rows else None
+
+    return await asyncio.to_thread(_op)
+
+
+async def create_hr_user(data: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def _op() -> Optional[Dict[str, Any]]:
+        resp = _get_supabase().table("hr_users").insert(data).execute()
+        rows = resp.data or []
+        return rows[0] if rows else None
+
+    return await asyncio.to_thread(_op)

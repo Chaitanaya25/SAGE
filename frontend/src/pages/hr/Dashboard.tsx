@@ -89,6 +89,7 @@ export default function Dashboard() {
   const navigate = useNavigate()
   const { theme, toggleTheme } = useTheme()
   const isDark = theme === "dark"
+  const company = localStorage.getItem("sage_company") || "SAGE"
 
   const [activeTab, setActiveTab] = useState<"dashboard" | "jobs" | "candidates" | "settings" | "pricing">("dashboard")
   const [loading, setLoading] = useState(true)
@@ -306,6 +307,7 @@ export default function Dashboard() {
           date: formatDate(interview.created_at),
         } satisfies CandidateRow
       })
+      .filter((r) => r.score !== null)
   }, [candidates, interviews, jobPostings])
 
   const filtered = useMemo(() => {
@@ -327,7 +329,7 @@ export default function Dashboard() {
       <aside className={["fixed inset-y-0 left-0 w-64 flex flex-col border-r", sidebarBg].join(" ")}>
         <div className="py-6 px-6">
           <div className="font-bold text-xl">SAGE</div>
-          <div className={["text-xs uppercase tracking-widest mt-1", textMuted].join(" ")}>HR Portal</div>
+          <div className={["text-xs uppercase tracking-widest mt-1", textMuted].join(" ")}>{company}</div>
         </div>
 
         <nav className="flex-1 px-3 space-y-1">
@@ -425,7 +427,7 @@ export default function Dashboard() {
                   ? "Enterprise plans for HR teams and organizations"
                   : activeTab === "jobs"
                     ? "Create and manage job postings"
-                  : "Welcome back, SAGE Admin"}
+                  : `Welcome back, ${company}`}
             </p>
           </div>
           <Button

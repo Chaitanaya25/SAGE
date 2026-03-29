@@ -22,9 +22,12 @@ export default function Login() {
   const [candidateName, setCandidateName] = useState("")
   const [candidateEmail, setCandidateEmail] = useState("")
 
-  const [hrEmail, setHrEmail] = useState("")
+  const [isHrSignup, setIsHrSignup] = useState(false)
+  const [hrEmail, setHrEmail] = useState(localStorage.getItem("sage_hr_email") || "")
   const [hrPassword, setHrPassword] = useState("")
-  const [hrCompany, setHrCompany] = useState("SAGE Demo Corp")
+  const [hrCompany, setHrCompany] = useState("")
+  const [hrName, setHrName] = useState("")
+  const [hrConfirmPassword, setHrConfirmPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
 
   const [error, setError] = useState<string | null>(null)
@@ -56,10 +59,49 @@ export default function Login() {
       localStorage.setItem("sage_token", result.token)
       localStorage.setItem("sage_user", JSON.stringify(result.user))
       localStorage.setItem("sage_role", "hr")
-      localStorage.setItem("sage_company", hrCompany.trim() || "SAGE Demo Corp")
+      localStorage.setItem("sage_hr_email", hrEmail.trim())
+      localStorage.setItem("sage_company", String(result.user?.company ?? "SAGE"))
       navigate("/hr/dashboard")
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function onHrSignup(e: React.FormEvent) {
+    e.preventDefault()
+    setError(null)
+    if (hrPassword !== hrConfirmPassword) {
+      setError("Passwords don't match")
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await fetch("http://localhost:8000/api/auth/hr-signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: hrEmail.trim(),
+          password: hrPassword,
+          name: hrName.trim(),
+          company_name: hrCompany.trim(),
+        }),
+      })
+      if (!res.ok) {
+        const e = (await res.json().catch(() => ({}))) as { detail?: string }
+        setError(e.detail || "Signup failed")
+        return
+      }
+      const data = (await res.json()) as { token: string; user: { company?: string } }
+      localStorage.setItem("sage_token", data.token)
+      localStorage.setItem("sage_role", "hr")
+      localStorage.setItem("sage_company", String(data.user?.company ?? hrCompany.trim()))
+      localStorage.setItem("sage_hr_email", hrEmail.trim())
+      setIsHrSignup(false)
+      navigate("/hr/dashboard")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Signup failed")
     } finally {
       setLoading(false)
     }
@@ -197,21 +239,39 @@ export default function Login() {
               </TabsContent>
 
               <TabsContent value="hr">
-                <form className="grid gap-4" onSubmit={onHrLogin}>
-                  <div className="grid gap-2">
-                    <Label htmlFor="hr-company">Company Name</Label>
-                    <div className="relative">
-                      <Building2 className={["absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4", isDark ? "text-zinc-500" : "text-zinc-400"].join(" ")} />
-                      <Input
-                        id="hr-company"
-                        placeholder="Company name"
-                        value={hrCompany}
-                        onChange={(e) => setHrCompany(e.target.value)}
-                        className="pl-10"
-                        required
-                      />
-                    </div>
-                  </div>
+                <form className="grid gap-4" onSubmit={isHrSignup ? onHrSignup : onHrLogin}>
+                  {isHrSignup ? (
+                    <>
+                      <div className="grid gap-2">
+                        <Label htmlFor="hr-company">Company Name</Label>
+                        <div className="relative">
+                          <Building2 className={["absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4", isDark ? "text-zinc-500" : "text-zinc-400"].join(" ")} />
+                          <Input
+                            id="hr-company"
+                            placeholder="Company name"
+                            value={hrCompany}
+                            onChange={(e) => setHrCompany(e.target.value)}
+                            className="pl-10"
+                            required
+                          />
+                        </div>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="hr-name">Full Name</Label>
+                        <div className="relative">
+                          <User className={["absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4", isDark ? "text-zinc-500" : "text-zinc-400"].join(" ")} />
+                          <Input
+                            id="hr-name"
+                            placeholder="Your name"
+                            value={hrName}
+                            onChange={(e) => setHrName(e.target.value)}
+                            className="pl-10"
+                            required
+                          />
+                        </div>
+                      </div>
+                    </>
+                  ) : null}
                   <div className="grid gap-2">
                     <Label htmlFor="hr-email">Email</Label>
                     <div className="relative">
@@ -252,6 +312,24 @@ export default function Login() {
                     </div>
                   </div>
 
+                  {isHrSignup ? (
+                    <div className="grid gap-2">
+                      <Label htmlFor="hr-confirm">Confirm Password</Label>
+                      <div className="relative">
+                        <Lock className={["absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4", isDark ? "text-zinc-500" : "text-zinc-400"].join(" ")} />
+                        <Input
+                          id="hr-confirm"
+                          type={showPassword ? "text" : "password"}
+                          placeholder="Confirm password"
+                          value={hrConfirmPassword}
+                          onChange={(e) => setHrConfirmPassword(e.target.value)}
+                          className="pl-10"
+                          required
+                        />
+                      </div>
+                    </div>
+                  ) : null}
+
                   {error ? <div className={["text-sm", isDark ? "text-red-400" : "text-red-600"].join(" ")}>{error}</div> : null}
 
                   <Button className={isDark ? "bg-[#7C3AED] hover:bg-[#7C3AED]/90 text-white" : "bg-black text-white hover:bg-black/90 border border-black"} disabled={loading} type="submit">
@@ -261,13 +339,36 @@ export default function Login() {
                         Logging in...
                       </span>
                     ) : (
-                      "Login"
+                      isHrSignup ? "Create HR Account" : "Login"
                     )}
                   </Button>
 
-                  <div className={["text-xs", isDark ? "text-zinc-400" : "text-zinc-600"].join(" ")}>
-                    Default HR credentials: admin@sage.ai / sage2025
-                  </div>
+                  {!isHrSignup ? (
+                    <div className="flex items-center justify-between text-xs">
+                      <button
+                        type="button"
+                        className={["underline underline-offset-4", isDark ? "text-zinc-300" : "text-zinc-700"].join(" ")}
+                        onClick={() => {
+                          setError(null)
+                          setIsHrSignup(true)
+                        }}
+                      >
+                        Don't have an account? Sign up
+                      </button>
+                      <span className={isDark ? "text-zinc-400" : "text-zinc-600"}>Demo: admin@sage.ai / sage2025</span>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className={["text-xs underline underline-offset-4 text-left", isDark ? "text-zinc-300" : "text-zinc-700"].join(" ")}
+                      onClick={() => {
+                        setError(null)
+                        setIsHrSignup(false)
+                      }}
+                    >
+                      Already have an account? Login
+                    </button>
+                  )}
                 </form>
               </TabsContent>
             </Tabs>

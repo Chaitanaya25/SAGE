@@ -30,10 +30,12 @@ app.add_middleware(
 from auth import create_token, verify_token
 from database import (
     create_job_posting,
+    create_hr_user,
     get_all_candidates,
     get_all_interviews,
     get_active_job_postings,
     get_candidate,
+    get_hr_user_by_email,
     get_interview,
     get_job_posting,
     get_job_postings,
@@ -236,8 +238,62 @@ async def get_single_interview(interview_id: str) -> dict:
 async def hr_login(req: LoginRequest) -> dict:
     if req.email == "admin@sage.ai" and req.password == "sage2025":
         token = create_token(user_id="admin", role="hr")
-        return {"token": token, "user": {"email": "admin@sage.ai", "name": "SAGE Admin"}}
-    raise HTTPException(status_code=401, detail="Invalid credentials")
+        return {
+            "token": token,
+            "user": {"email": "admin@sage.ai", "name": "SAGE Admin", "company": "SAGE Demo Corp"},
+        }
+
+    try:
+        user = await get_hr_user_by_email(req.email)
+        if user and user.get("password") == req.password:
+            token = create_token(user_id=user["id"], role="hr")
+            return {
+                "token": token,
+                "user": {
+                    "email": user.get("email", ""),
+                    "name": user.get("name", "") or "",
+                    "company": user.get("company_name", "") or "",
+                },
+            }
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+
+
+@app.post("/api/auth/hr-signup")
+async def hr_signup(request: Request) -> dict:
+    data = await request.json()
+    required = ["email", "password", "name", "company_name"]
+    for f in required:
+        if not data.get(f):
+            raise HTTPException(status_code=400, detail=f"Missing: {f}")
+
+    existing = await get_hr_user_by_email(str(data["email"]))
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    created = await create_hr_user(
+        {
+            "email": data["email"],
+            "password": data["password"],
+            "name": data["name"],
+            "company_name": data["company_name"],
+        }
+    )
+    if not created:
+        raise HTTPException(status_code=500, detail="Failed to create account")
+
+    token = create_token(user_id=created["id"], role="hr")
+    return {
+        "token": token,
+        "user": {
+            "email": created.get("email", ""),
+            "name": created.get("name", ""),
+            "company": created.get("company_name", ""),
+        },
+    }
 
 
 @app.post("/api/auth/candidate-login")
